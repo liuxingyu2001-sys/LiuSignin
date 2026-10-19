@@ -5,10 +5,13 @@
 #   item: 'ce:namespace:id'        LiuLib 物品规格（支持 CE / base64），优先级高于 material
 #
 # 文本支持 MiniMessage，可用占位符：
-#   {day} {date} {reward} {streak} {total} {cards} {month} {year} {player} {cost}
+#   {day} {date} {reward} {streak} {total} {best} {cards} {month} {month-name} {year} {player} {cost}
+
+# 配置结构版本：插件升级时会自动备份旧文件并替换为新版
+menus-version: 2
 
 calendar:
-  title: '<gradient:#5ee7df:#b490ca>每日签到</gradient> <dark_gray>·</dark_gray> <white>{month}</white>'
+  title: '<dark_aqua>签到</dark_aqua> <dark_gray>·</dark_gray> <white>{month-name}</white>'
   rows: 6
   # 日历占用的列数（从第 0 列开始）与每周起始日
   day-columns: 7
@@ -19,34 +22,27 @@ calendar:
 
   # 功能槽位（不能与日历格子重叠）
   slots:
-    streak: 7
-    total: 8
-    cards: 16
-    next-reward: 17
-    leaderboard: 25
-    mail: 26
-    prev-month: 43
-    next-month: 44
+    prev-month: 7
+    stats: 8
+    next-month: 16
+    cards: 17
+    next-reward: 26
+    mail: 35
+    leaderboard: 44
     close: 53
 
   info:
-    streak:
+    stats:
       material: 'CLOCK'
-      name: '<yellow>连续签到</yellow>'
+      name: '<yellow>签到统计</yellow>'
       lore:
-        - '<white>{streak} 天</white>'
-        - '<dark_gray>断签会从 1 重新计算</dark_gray>'
-    total:
-      material: 'BOOK'
-      name: '<aqua>累计签到</aqua>'
-      lore:
-        - '<white>{total} 天</white>'
+        - '<white>连续 {streak} 天 · 累计 {total} 天</white>'
+        - '<dark_gray>最佳 {best} 天</dark_gray>'
     cards:
       material: 'PAPER'
       name: '<light_purple>补签卡</light_purple>'
       lore:
         - '<white>{cards} 张</white>'
-        - '<dark_gray>点击漏签日期使用</dark_gray>'
     next-reward:
       material: 'CHEST'
       name: '<gold>今日奖励</gold>'
@@ -56,9 +52,9 @@ calendar:
       material: 'GOLD_INGOT'
       name: '<gold>签到排行</gold>'
       lore:
-        - '<gray>点击查看连续 / 累计排行</gray>'
+        - '<gray>点击查看</gray>'
     mail:
-      material: 'CHEST_MINECART'
+      material: 'ENDER_CHEST'
       name: '<aqua>签到邮箱</aqua>'
       lore:
         - '<gray>点击领取暂存奖励</gray>'
@@ -72,65 +68,52 @@ calendar:
       material: 'BARRIER'
       name: '<red>关闭</red>'
 
-  # 日历格子的四种状态
+  # 日历格子状态：用颜色区分，不在每个格子里塞长奖励文本
   states:
     signed:
-      material: 'LIME_STAINED_GLASS_PANE'
-      name: '<green>{day} 日 · 已签到</green>'
+      material: 'LIME_DYE'
+      name: '<green>{day}</green>'
       lore:
-        - '<gray>{date}</gray>'
-        - '<dark_gray>奖励</dark_gray> <white>{reward}</white>'
+        - '<dark_gray>已签到</dark_gray>'
     signed-today:
       material: 'EMERALD'
-      name: '<gold>今天 · 已签到</gold>'
+      name: '<green>{day} · 今天</green>'
       lore:
-        - '<gray>{date}</gray>'
-        - '<dark_gray>奖励</dark_gray> <white>{reward}</white>'
-        - ''
-        - '<green>✔ 明天再来</green>'
+        - '<dark_gray>今天已签到</dark_gray>'
+      glow: true
     today:
       material: 'EMERALD'
-      name: '<gold>今天 · 点击签到</gold>'
+      name: '<gold>{day} · 今天</gold>'
       lore:
-        - '<gray>{date}</gray>'
-        - '<dark_gray>奖励</dark_gray> <white>{reward}</white>'
-        - ''
-        - '<yellow>▶ 点击签到</yellow>'
+        - '<yellow>点击签到</yellow>'
+      glow: true
     missed:
-      material: 'RED_STAINED_GLASS_PANE'
-      name: '<red>{day} 日 · 漏签</red>'
+      material: 'RED_DYE'
+      name: '<red>{day}</red>'
       lore:
-        - '<gray>{date}</gray>'
-        - '<dark_gray>奖励</dark_gray> <white>{reward}</white>'
-        - ''
-        - '<yellow>▶ 点击补签（消耗 {cost} 张补签卡）</yellow>'
+        - '<gray>点击补签</gray>'
     missed-locked:
-      material: 'ORANGE_STAINED_GLASS_PANE'
-      name: '<red>{day} 日 · 漏签</red>'
+      material: 'GRAY_DYE'
+      name: '<dark_gray>{day}</dark_gray>'
       lore:
-        - '<gray>{date}</gray>'
-        - '<dark_gray>已超出补签期限</dark_gray>'
+        - '<dark_gray>已过期</dark_gray>'
     future:
-      material: 'GRAY_STAINED_GLASS_PANE'
-      name: '<gray>{day} 日</gray>'
-      lore:
-        - '<gray>{date}</gray>'
-        - '<dark_gray>奖励</dark_gray> <white>{reward}</white>'
+      material: 'GRAY_DYE'
+      name: '<gray>{day}</gray>'
 
 # 补签确认界面
 makeup:
-  title: '<dark_aqua>补签确认</dark_aqua>'
+  title: '<dark_aqua>补签</dark_aqua> <dark_gray>·</dark_gray> <white>{date}</white>'
   rows: 3
   info-slot: 13
   confirm-slot: 11
   cancel-slot: 15
   info:
     material: 'WRITABLE_BOOK'
-    name: '<yellow>补签 {date}</yellow>'
+    name: '<yellow>{date}</yellow>'
     lore:
-      - '<gray>将消耗 <white>{cost}</white> 张补签卡</gray>'
-      - '<gray>该日奖励：</gray> <white>{reward}</white>'
-      - '<dark_gray>补签紧邻日期可续接连续天数</dark_gray>'
+      - '<gray>消耗 <white>{cost}</white> 张补签卡</gray>'
+      - '<gray>该日奖励：<white>{reward}</white></gray>'
   confirm:
     material: 'LIME_CONCRETE'
     name: '<green>确认补签</green>'
@@ -140,7 +123,7 @@ makeup:
     material: 'RED_CONCRETE'
     name: '<red>取消</red>'
     lore:
-      - '<gray>点击返回</gray>'
+      - '<gray>返回日历</gray>'
 
 # 签到邮箱
 mail:
@@ -165,10 +148,10 @@ mail:
     name: '<white>{name}</white>'
     lore:
       - '<gray>数量：<white>{amount}</white></gray>'
-      - ''
-      - '<yellow>▶ 点击领取</yellow>'
+      - '<yellow>点击领取</yellow>'
+  # 空白格：不显示名称，避免整屏“空”提示
   empty:
-    material: 'GRAY_STAINED_GLASS_PANE'
-    name: '<gray>空</gray>'
+    material: 'BLACK_STAINED_GLASS_PANE'
+    name: ''
 
 # 排行榜（聊天输出，非 GUI）

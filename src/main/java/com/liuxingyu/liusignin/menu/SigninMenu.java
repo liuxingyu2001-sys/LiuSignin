@@ -84,6 +84,9 @@ public final class SigninMenu {
         LocalDate first = view.atDay(1);
         int weekStart = config.weekStart() == DayOfWeek.MONDAY ? 1 : 7;
         int offset = (first.getDayOfWeek().getValue() - weekStart + 7) % 7;
+        boolean showReward = config.states().values().stream().anyMatch(template ->
+                template.name().contains("{reward}")
+                        || template.lore().stream().anyMatch(line -> line.contains("{reward}")));
 
         for (int day = 1; day <= view.lengthOfMonth(); day++) {
             int index = offset + day - 1;
@@ -97,7 +100,8 @@ public final class SigninMenu {
             Map<String, String> placeholders = new LinkedHashMap<>(base);
             placeholders.put("day", String.valueOf(day));
             placeholders.put("date", date.format(DATE_FORMAT));
-            placeholders.put("reward", rewardSummary(player, state, date, today));
+            placeholders.put("reward", showReward
+                    ? rewardSummary(player, state, date, today) : "");
             placeholders.put("cost", String.valueOf(plugin.config().makeup().cardsPerMakeup()));
 
             String stateKey = stateKey(state, date, today);
@@ -211,6 +215,7 @@ public final class SigninMenu {
         placeholders.put("best", String.valueOf(data.bestStreak()));
         placeholders.put("cards", String.valueOf(data.makeupCards()));
         placeholders.put("month", view.format(MONTH_FORMAT));
+        placeholders.put("month-name", view.getYear() + " 年 " + view.getMonthValue() + " 月");
         placeholders.put("year", String.valueOf(view.getYear()));
         placeholders.put("today", today.format(DATE_FORMAT));
         placeholders.put("cost", String.valueOf(plugin.config().makeup().cardsPerMakeup()));

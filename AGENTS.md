@@ -4,7 +4,7 @@
 
 ```bash
 cd /home/liu/plugins/LiuSignin
-mvn clean package     # 产物 target/LiuSignin-1.0.0.jar
+mvn clean package     # 产物 target/LiuSignin-1.0.2.jar
 mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组）
 ```
 
@@ -43,4 +43,4 @@ mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组�
 ## 发布
 
 - 未经用户明确要求，不复制 jar 到服务器、不提交、不推送。
-- 版本号变更遵循用户指示；默认 `1.0.0`。
+- 版本号变更遵循用户指示；默认 `1.0.2`。

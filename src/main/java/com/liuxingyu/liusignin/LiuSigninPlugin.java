@@ -27,6 +27,9 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -35,6 +38,8 @@ import java.util.logging.Level;
  * LiuSignin 主类：加载配置、组装模块、注册命令与监听器。
  */
 public final class LiuSigninPlugin extends JavaPlugin {
+
+    private static final int MENUS_VERSION = 2;
 
     private volatile SigninConfig config = SigninConfig.defaults();
     private volatile SigninTime time = new SigninTime(config.timezone(), config.resetTime());
@@ -63,6 +68,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
         saveDefaultConfig();
         saveIfMissing("rewards.yml");
         saveIfMissing("menus.yml");
+        migrateMenus();
         saveIfMissing("messages.yml");
 
         try {
@@ -149,6 +155,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
         this.rewards = RewardTable.load(
                 YamlConfiguration.loadConfiguration(file("rewards.yml")),
                 fresh.fallbackRewards(), getLogger());
+        migrateMenus();
         this.menus = MenuConfig.load(YamlConfiguration.loadConfiguration(file("menus.yml")));
         if (store != null) {
             store.prefix(fresh.tablePrefix());
@@ -163,6 +170,31 @@ public final class LiuSigninPlugin extends JavaPlugin {
         File file = new File(getDataFolder(), name);
         if (!file.exists()) {
             saveResource(name, false);
+        }
+    }
+
+    /**
+     * menus.yml 结构升级：旧版没有 menus-version，备份后替换为新版默认布局。
+     * 玩家自定义的旧文件会保留为 menus-v{old}-backup.yml，可手动合并。
+     */
+    private void migrateMenus() {
+        File menusFile = file("menus.yml");
+        if (!menusFile.exists()) {
+            return;
+        }
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(menusFile);
+        int version = yaml.getInt("menus-version", 0);
+        if (version >= MENUS_VERSION) {
+            return;
+        }
+        File backup = new File(getDataFolder(), "menus-v" + version + "-backup.yml");
+        try {
+            Files.copy(menusFile.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            saveResource("menus.yml", true);
+            getLogger().info("menus.yml 已升级到 v" + MENUS_VERSION
+                    + "，旧配置备份为 " + backup.getName());
+        } catch (IOException | IllegalArgumentException error) {
+            getLogger().warning("menus.yml 升级失败，继续使用旧配置：" + error.getMessage());
         }
     }
 

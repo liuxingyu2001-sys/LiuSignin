@@ -1,5 +1,6 @@
 package com.liuxingyu.liusignin.menu;
 
+import com.liuxingyu.liulib.item.ItemNames;
 import com.liuxingyu.liulib.item.ItemService;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
@@ -36,10 +37,13 @@ public record ItemTemplate(
             return stack;
         }
         if (nameText != null && !nameText.isBlank()) {
-            meta.displayName(items.names().parse(nameText));
+            meta.displayName(ItemNames.nonItalic(items.names().parse(nameText)));
         }
         if (loreText != null && !loreText.isEmpty()) {
-            meta.lore(loreText.stream().map(items.names()::parse).toList());
+            meta.lore(loreText.stream()
+                    .map(items.names()::parse)
+                    .map(ItemNames::nonItalic)
+                    .toList());
         }
         if (glow) {
             meta.addEnchant(Enchantment.UNBREAKING, 1, true);

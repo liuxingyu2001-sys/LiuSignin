@@ -4,7 +4,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 - 包名：`com.liuxingyu.liusignin`
 - 命令：`/signin`（别名 `/sign`、`/qd`、`/qiandao`）
-- 版本：`1.0.0`
+- 版本：`1.0.2`
 - 硬依赖：[LiuLib](../LiuLib)（MySQL 连接池 / Redis / Sparrow UI / 物品解析）
 
 ---
@@ -13,7 +13,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 | 模块 | 说明 |
 | --- | --- |
-| 月历签到 | 6×7 月历界面，按日期号发奖，支持翻月、漏签标记、今日高亮 |
+| 月历签到 | 6×7 日期网格 + 单列侧栏，按日期号发奖；翻月、漏签、今日高亮 |
 | 无限递增 | 按连续签到天数递增金币/经验，可设上限与阶段奖励 |
 | 奖励组 | 按权限 + priority 匹配，例如普通玩家走月历、VIP 走无限递增 |
 | 补签 | 消耗补签卡补最近 N 天；紧邻上次签到时可续连 |
@@ -51,7 +51,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 ## 安装
 
-1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.0.jar` 放入 `plugins/`。
+1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.2.jar` 放入 `plugins/`。
 2. 启动一次服务器，生成 `plugins/LiuSignin/config.yml`、`rewards.yml`、`menus.yml`、`messages.yml`。
 3. 按需修改配置，`/signin reload` 重载（表前缀变更会重新建表）。
 4. 多台子服共用同一个 MySQL 库，并保持 `timezone`、`reset-time`、`table-prefix` 完全一致。
@@ -188,7 +188,11 @@ groups:
 
 ### `menus.yml`
 
-月历标题、行数、星期起始、背景、功能槽位、6 种日期状态（`signed` / `signed-today` / `today` / `missed` / `missed-locked` / `future`）、补签确认菜单、邮箱菜单。物品支持 `material` 或 LiuLib `item` 规格，名称/lore 使用 MiniMessage。
+月历采用「左侧 7 列日期 + 右侧单列侧栏」：侧栏只保留签到统计、补签卡、今日奖励、排行、邮箱、翻月和关闭，日期格子不再塞长奖励文本，改用染料颜色区分状态（绿=已签、红=漏签、灰=未来、绿宝石=今天）。
+
+物品支持 `material` 或 LiuLib `item` 规格，名称/lore 使用 MiniMessage，并统一关闭物品默认斜体。
+
+`menus.yml` 带有 `menus-version`。插件升级检测到旧版结构时，会把旧文件备份为 `menus-v<旧版本>-backup.yml`，再写入新版默认布局；自定义过的旧配置可从备份中手动合并。
 
 ### `messages.yml`
 
@@ -256,7 +260,7 @@ public void onSignin(PlayerSigninEvent event) {
 
 ```bash
 mvn clean package
-# 产物：target/LiuSignin-1.0.0.jar
+# 产物：target/LiuSignin-1.0.2.jar
 ```
 
 单元测试覆盖奖励 DSL、月历/无限奖励计算、签到日重置逻辑：

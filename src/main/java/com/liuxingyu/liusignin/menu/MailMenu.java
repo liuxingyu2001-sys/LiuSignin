@@ -1,5 +1,6 @@
 package com.liuxingyu.liusignin.menu;
 
+import com.liuxingyu.liulib.item.ItemNames;
 import com.liuxingyu.liulib.ui.SparrowUi;
 import com.liuxingyu.liusignin.LiuSigninPlugin;
 import com.liuxingyu.liusignin.data.MailEntry;
@@ -127,12 +128,13 @@ public final class MailMenu {
         }
         String display = Text.fill(nameTemplate, "name", name, "amount", amount);
         if (!display.isBlank()) {
-            meta.displayName(plugin.items().names().parse(display));
+            meta.displayName(ItemNames.nonItalic(plugin.items().names().parse(display)));
         }
         if (loreTemplate != null && !loreTemplate.isEmpty()) {
             meta.lore(loreTemplate.stream()
                     .map(line -> Text.fill(line, "name", name, "amount", amount))
                     .map(plugin.items().names()::parse)
+                    .map(ItemNames::nonItalic)
                     .toList());
         }
         stack.setItemMeta(meta);

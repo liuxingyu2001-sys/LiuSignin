@@ -71,8 +71,10 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
     }
 
     private static Calendar loadCalendar(ConfigurationSection section) {
-        String title = section == null ? "每日签到"
-                : section.getString("title", "每日签到");
+        String title = section == null
+                ? "<dark_aqua>签到</dark_aqua> <dark_gray>·</dark_gray> <white>{month-name}</white>"
+                : section.getString("title",
+                        "<dark_aqua>签到</dark_aqua> <dark_gray>·</dark_gray> <white>{month-name}</white>");
         int rows = clamp(section == null ? 6 : section.getInt("rows", 6), 1, 6);
         int dayColumns = clamp(section == null ? 7 : section.getInt("day-columns", 7), 1, 9);
         String weekStartRaw = section == null ? "monday" : section.getString("week-start", "monday");
@@ -91,14 +93,13 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
                 slots.put(key.toLowerCase(), slotSection.getInt(key));
             }
         }
-        slots.putIfAbsent("streak", 7);
-        slots.putIfAbsent("total", 8);
-        slots.putIfAbsent("cards", 16);
-        slots.putIfAbsent("next-reward", 17);
-        slots.putIfAbsent("leaderboard", 25);
-        slots.putIfAbsent("mail", 26);
-        slots.putIfAbsent("prev-month", 43);
-        slots.putIfAbsent("next-month", 44);
+        slots.putIfAbsent("prev-month", 7);
+        slots.putIfAbsent("stats", 8);
+        slots.putIfAbsent("next-month", 16);
+        slots.putIfAbsent("cards", 17);
+        slots.putIfAbsent("next-reward", 26);
+        slots.putIfAbsent("mail", 35);
+        slots.putIfAbsent("leaderboard", 44);
         slots.putIfAbsent("close", 53);
 
         Map<String, ItemTemplate> info = new LinkedHashMap<>();
@@ -112,18 +113,17 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
                 }
             }
         }
-        info.putIfAbsent("streak", template(null, null, "CLOCK", "<yellow>连续签到</yellow>",
-                List.of("<white>{streak} 天</white>"), false));
-        info.putIfAbsent("total", template(null, null, "BOOK", "<aqua>累计签到</aqua>",
-                List.of("<white>{total} 天</white>"), false));
+        info.putIfAbsent("stats", template(null, null, "CLOCK", "<yellow>签到统计</yellow>",
+                List.of("<white>连续 {streak} 天 · 累计 {total} 天</white>",
+                        "<dark_gray>最佳 {best} 天</dark_gray>"), false));
         info.putIfAbsent("cards", template(null, null, "PAPER", "<light_purple>补签卡</light_purple>",
                 List.of("<white>{cards} 张</white>"), false));
         info.putIfAbsent("next-reward", template(null, null, "CHEST", "<gold>今日奖励</gold>",
                 List.of("<white>{reward}</white>"), false));
         info.putIfAbsent("leaderboard", template(null, null, "GOLD_INGOT", "<gold>签到排行</gold>",
                 List.of("<gray>点击查看</gray>"), false));
-        info.putIfAbsent("mail", template(null, null, "CHEST_MINECART", "<aqua>签到邮箱</aqua>",
-                List.of("<gray>点击领取</gray>"), false));
+        info.putIfAbsent("mail", template(null, null, "ENDER_CHEST", "<aqua>签到邮箱</aqua>",
+                List.of("<gray>点击领取暂存奖励</gray>"), false));
         info.putIfAbsent("prev-month", template(null, null, "ARROW", "<white>上个月</white>", List.of(), false));
         info.putIfAbsent("next-month", template(null, null, "ARROW", "<white>下个月</white>", List.of(), false));
         info.putIfAbsent("close", template(null, null, "BARRIER", "<red>关闭</red>", List.of(), false));
@@ -139,40 +139,37 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
                 }
             }
         }
-        states.putIfAbsent("signed", template(null, null, "LIME_STAINED_GLASS_PANE",
-                "<green>{day} 日 · 已签到</green>",
-                List.of("<gray>{date}</gray>", "<dark_gray>奖励</dark_gray> <white>{reward}</white>"), false));
+        states.putIfAbsent("signed", template(null, null, "LIME_DYE",
+                "<green>{day}</green>", List.of("<dark_gray>已签到</dark_gray>"), false));
         states.putIfAbsent("signed-today", template(null, null, "EMERALD",
-                "<gold>今天 · 已签到</gold>",
-                List.of("<gray>{date}</gray>", "<dark_gray>奖励</dark_gray> <white>{reward}</white>"), false));
+                "<green>{day} · 今天</green>", List.of("<dark_gray>今天已签到</dark_gray>"), true));
         states.putIfAbsent("today", template(null, null, "EMERALD",
-                "<gold>今天 · 点击签到</gold>",
-                List.of("<gray>{date}</gray>", "<dark_gray>奖励</dark_gray> <white>{reward}</white>",
-                        "<yellow>▶ 点击签到</yellow>"), false));
-        states.putIfAbsent("missed", template(null, null, "RED_STAINED_GLASS_PANE",
-                "<red>{day} 日 · 漏签</red>",
-                List.of("<gray>{date}</gray>", "<yellow>▶ 点击补签（消耗 {cost} 张补签卡）</yellow>"), false));
-        states.putIfAbsent("missed-locked", template(null, null, "ORANGE_STAINED_GLASS_PANE",
-                "<red>{day} 日 · 漏签</red>",
-                List.of("<gray>{date}</gray>", "<dark_gray>已超出补签期限</dark_gray>"), false));
-        states.putIfAbsent("future", template(null, null, "GRAY_STAINED_GLASS_PANE",
-                "<gray>{day} 日</gray>",
-                List.of("<gray>{date}</gray>", "<dark_gray>奖励</dark_gray> <white>{reward}</white>"), false));
+                "<gold>{day} · 今天</gold>", List.of("<yellow>点击签到</yellow>"), true));
+        states.putIfAbsent("missed", template(null, null, "RED_DYE",
+                "<red>{day}</red>", List.of("<gray>点击补签</gray>"), false));
+        states.putIfAbsent("missed-locked", template(null, null, "GRAY_DYE",
+                "<dark_gray>{day}</dark_gray>", List.of("<dark_gray>已过期</dark_gray>"), false));
+        states.putIfAbsent("future", template(null, null, "GRAY_DYE",
+                "<gray>{day}</gray>", List.of(), false));
 
         return new Calendar(title, rows, dayColumns, weekStart, background,
                 Map.copyOf(slots), Map.copyOf(info), Map.copyOf(states));
     }
 
     private static Makeup loadMakeup(ConfigurationSection section) {
-        String title = section == null ? "补签确认" : section.getString("title", "补签确认");
+        String title = section == null
+                ? "<dark_aqua>补签</dark_aqua> <dark_gray>·</dark_gray> <white>{date}</white>"
+                : section.getString("title",
+                        "<dark_aqua>补签</dark_aqua> <dark_gray>·</dark_gray> <white>{date}</white>");
         int rows = clamp(section == null ? 3 : section.getInt("rows", 3), 1, 6);
         int info = section == null ? 13 : section.getInt("info-slot", 13);
         int confirm = section == null ? 11 : section.getInt("confirm-slot", 11);
         int cancel = section == null ? 15 : section.getInt("cancel-slot", 15);
         return new Makeup(title, rows, info, confirm, cancel,
                 template(section == null ? null : section.getConfigurationSection("info"),
-                        null, "WRITABLE_BOOK", "<yellow>补签 {date}</yellow>",
-                        List.of("<gray>消耗 <white>{cost}</white> 张补签卡</gray>"), false),
+                        null, "WRITABLE_BOOK", "<yellow>{date}</yellow>",
+                        List.of("<gray>消耗 <white>{cost}</white> 张补签卡</gray>",
+                                "<gray>该日奖励：<white>{reward}</white></gray>"), false),
                 template(section == null ? null : section.getConfigurationSection("confirm"),
                         null, "LIME_CONCRETE", "<green>确认补签</green>", List.of(), false),
                 template(section == null ? null : section.getConfigurationSection("cancel"),
@@ -197,7 +194,7 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
                 : section.getString("entry.name", "<white>{name}</white>");
         List<String> entryLore = section == null ? List.of() : section.getStringList("entry.lore");
         if (entryLore.isEmpty()) {
-            entryLore = List.of("<gray>数量：<white>{amount}</white></gray>", "<yellow>▶ 点击领取</yellow>");
+            entryLore = List.of("<gray>数量：<white>{amount}</white></gray>", "<yellow>点击领取</yellow>");
         }
         return new Mail(title, rows, List.copyOf(itemSlots), claimAll, close,
                 template(section == null ? null : section.getConfigurationSection("claim-all"),
@@ -206,7 +203,7 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
                 template(section == null ? null : section.getConfigurationSection("close"),
                         null, "BARRIER", "<red>关闭</red>", List.of(), false),
                 template(section == null ? null : section.getConfigurationSection("empty"),
-                        null, "GRAY_STAINED_GLASS_PANE", "<gray>空</gray>", List.of(), false),
+                        null, "BLACK_STAINED_GLASS_PANE", "", List.of(), false),
                 entryName, entryLore);
     }
 
@@ -226,7 +223,7 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
         if (lore == null || lore.isEmpty()) {
             lore = defaultLore;
         }
-        boolean glow = section != null && section.getBoolean("glow", defaultGlow);
+        boolean glow = section == null ? defaultGlow : section.getBoolean("glow", defaultGlow);
         return new ItemTemplate(item, material, name, List.copyOf(lore), glow);
     }
 
