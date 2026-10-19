@@ -4,7 +4,7 @@
 
 ```bash
 cd /home/liu/plugins/LiuSignin
-mvn clean package     # 产物 target/LiuSignin-1.0.2.jar
+mvn clean package     # 产物 target/LiuSignin-1.0.3.jar
 mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组）
 ```
 
@@ -37,10 +37,11 @@ mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组�
 ## 配置
 
 - `config.yml` 只放运行参数；奖励表、菜单、消息分别放 `rewards.yml`、`menus.yml`、`messages.yml`。
+- `shared-config-path` 只从本服本地 `config.yml` 读取；启用共享目录后四个 yml 都走共享根目录，不能再按 `getDataFolder()` 找配置。
 - 所有配置解析都要有代码内默认值，配置缺段不能让插件启动失败。
 - 新增消息键必须同时写入 `messages.yml`；`Messages.send` 对缺失键会告警并跳过。
 
 ## 发布
 
 - 未经用户明确要求，不复制 jar 到服务器、不提交、不推送。
-- 版本号变更遵循用户指示；默认 `1.0.2`。
+- 版本号变更遵循用户指示；默认 `1.0.3`。

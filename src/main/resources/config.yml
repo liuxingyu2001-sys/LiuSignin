@@ -2,6 +2,15 @@
 # 依赖：LiuLib（MySQL / Redis / Sparrow UI / 物品解析）
 # 多台子服必须共用同一份 MySQL 与 Redis，并保持 timezone / reset-time 一致。
 
+# 群组共享配置目录。留空时自动检测 /mc/shared/liusignin-config（存在才用）。
+# 这个键只从各服本地 plugins/LiuSignin/config.yml 读取；填写绝对路径后，
+# config.yml / rewards.yml / menus.yml / messages.yml 都从该目录读取，
+# 首次会自动复制默认配置。相对路径按服务端工作目录解析。
+shared-config-path: ''
+
+# 共享目录内 yml 变化时自动重载（仅在启用共享目录时生效）
+shared-config-watch: true
+
 settings:
   # 签到日按该时区计算，跨服务必统一
   timezone: 'Asia/Shanghai'

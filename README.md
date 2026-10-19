@@ -4,7 +4,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 - 包名：`com.liuxingyu.liusignin`
 - 命令：`/signin`（别名 `/sign`、`/qd`、`/qiandao`）
-- 版本：`1.0.2`
+- 版本：`1.0.3`
 - 硬依赖：[LiuLib](../LiuLib)（MySQL 连接池 / Redis / Sparrow UI / 物品解析）
 
 ---
@@ -16,6 +16,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 | 月历签到 | 6×7 日期网格 + 单列侧栏，按日期号发奖；翻月、漏签、今日高亮 |
 | 无限递增 | 按连续签到天数递增金币/经验，可设上限与阶段奖励 |
 | 奖励组 | 按权限 + priority 匹配，例如普通玩家走月历、VIP 走无限递增 |
+| 共享配置 | 多台子服可共用同一份 yml，自动复制、补键与热重载 |
 | 补签 | 消耗补签卡补最近 N 天；紧邻上次签到时可续连 |
 | 签到邮箱 | 背包装不下的物品、Vault 不可用时的金币自动暂存，可单领/一键领取 |
 | 多服共享 | 所有数据在 MySQL，`(uuid, sign_date)` 唯一键裁决并发；Redis Pub/Sub 通知他服丢缓存 |
@@ -51,10 +52,25 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 ## 安装
 
-1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.2.jar` 放入 `plugins/`。
+1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.3.jar` 放入 `plugins/`。
 2. 启动一次服务器，生成 `plugins/LiuSignin/config.yml`、`rewards.yml`、`menus.yml`、`messages.yml`。
 3. 按需修改配置，`/signin reload` 重载（表前缀变更会重新建表）。
 4. 多台子服共用同一个 MySQL 库，并保持 `timezone`、`reset-time`、`table-prefix` 完全一致。
+
+### 共享配置目录
+
+多台子服可以共用一份配置。各服本地 `plugins/LiuSignin/config.yml` 只负责指路：
+
+```yaml
+shared-config-path: '/mc/shared/liusignin-config'
+```
+
+- 留空时自动检测 `/mc/shared/liusignin-config`，目录存在才启用；否则使用本服 `plugins/LiuSignin`。
+- 显式路径不存在时会自动创建；创建失败则回退本服目录。
+- 启用后 `config.yml`、`rewards.yml`、`menus.yml`、`messages.yml` 全部从共享目录读取，首次自动复制默认文件。
+- `shared-config-path` 只从**本服本地** `config.yml` 读取，共享 `config.yml` 里的同键不会反向影响路径选择。
+- 共享 `config.yml` 新增但缺失的键会自动补全，不覆盖已有值。
+- 本服 `config.yml` 的 `shared-config-watch: true`（默认）会监听共享目录及本服 bootstrap 的变化，自动重载；改完路径也可以手动 `/signin reload`。
 
 ---
 
@@ -260,7 +276,7 @@ public void onSignin(PlayerSigninEvent event) {
 
 ```bash
 mvn clean package
-# 产物：target/LiuSignin-1.0.2.jar
+# 产物：target/LiuSignin-1.0.3.jar
 ```
 
 单元测试覆盖奖励 DSL、月历/无限奖励计算、签到日重置逻辑：

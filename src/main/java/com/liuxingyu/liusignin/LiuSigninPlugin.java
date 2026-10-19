@@ -23,13 +23,20 @@ import com.liuxingyu.liusignin.sync.CrossServerSync;
 import com.liuxingyu.liusignin.time.SigninTime;
 import com.liuxingyu.liusignin.util.Messages;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -40,6 +47,8 @@ import java.util.logging.Level;
 public final class LiuSigninPlugin extends JavaPlugin {
 
     private static final int MENUS_VERSION = 2;
+    private static final String AUTO_SHARED_CONFIG = "/mc/shared/liusignin-config";
+    private static final long CONFIG_WATCH_TICKS = 40L;
 
     private volatile SigninConfig config = SigninConfig.defaults();
     private volatile SigninTime time = new SigninTime(config.timezone(), config.resetTime());
@@ -61,20 +70,31 @@ public final class LiuSigninPlugin extends JavaPlugin {
 
     private volatile ItemService items;
     private volatile SparrowUi sparrow;
+    private volatile File configRoot;
+    private volatile YamlConfiguration runtimeConfig;
+    private volatile BukkitTask configWatchTask;
+    private volatile File watchedRoot;
+    private volatile long watchedFingerprint;
+    private volatile boolean configReloadQueued;
     private final String serverId = UUID.randomUUID().toString();
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        saveIfMissing("rewards.yml");
-        saveIfMissing("menus.yml");
-        migrateMenus();
-        saveIfMissing("messages.yml");
 
         try {
             LiuLibApi api = LiuLib.api();
             this.items = api.items();
             this.sparrow = api.sparrow();
+
+            mergeLocalBootstrap();
+            resolveConfigRoot();
+            saveIfMissing("config.yml");
+            saveIfMissing("rewards.yml");
+            saveIfMissing("menus.yml");
+            migrateMenus();
+            saveIfMissing("messages.yml");
+            loadRuntimeConfig();
 
             MySql mysql = api.mysql();
             if (mysql == null || !mysql.isReady()) {
@@ -83,7 +103,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
                 return;
             }
 
-            this.config = SigninConfig.load(getConfig());
+            this.config = SigninConfig.load(runtimeConfig);
             this.time = new SigninTime(config.timezone(), config.resetTime());
             this.messages = Messages.load(file("messages.yml"), items, getLogger());
             this.rewards = RewardTable.load(
@@ -117,6 +137,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
             this.sync.start();
 
             PlaceholderHook.register(this);
+            startConfigWatcher();
 
             // 每 60 秒刷新一次“今日签到人数”缓存
             getServer().getAsyncScheduler().runAtFixedRate(this,
@@ -139,6 +160,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        stopConfigWatcher();
         if (sync != null) {
             sync.stop();
         }
@@ -146,16 +168,23 @@ public final class LiuSigninPlugin extends JavaPlugin {
     }
 
     /** 重载 config.yml / rewards.yml / menus.yml / messages.yml 并清空缓存。 */
-    public void reloadEverything() {
+    public synchronized void reloadEverything() {
         reloadConfig();
-        SigninConfig fresh = SigninConfig.load(getConfig());
+        mergeLocalBootstrap();
+        resolveConfigRoot();
+        saveIfMissing("config.yml");
+        saveIfMissing("rewards.yml");
+        saveIfMissing("menus.yml");
+        migrateMenus();
+        saveIfMissing("messages.yml");
+        loadRuntimeConfig();
+        SigninConfig fresh = SigninConfig.load(runtimeConfig == null ? getConfig() : runtimeConfig);
         this.config = fresh;
         this.time = new SigninTime(fresh.timezone(), fresh.resetTime());
         this.messages = Messages.load(file("messages.yml"), items, getLogger());
         this.rewards = RewardTable.load(
                 YamlConfiguration.loadConfiguration(file("rewards.yml")),
                 fresh.fallbackRewards(), getLogger());
-        migrateMenus();
         this.menus = MenuConfig.load(YamlConfiguration.loadConfiguration(file("menus.yml")));
         if (store != null) {
             store.prefix(fresh.tablePrefix());
@@ -164,13 +193,139 @@ public final class LiuSigninPlugin extends JavaPlugin {
         if (service != null) {
             service.clearCaches();
         }
+        startConfigWatcher();
+        this.watchedFingerprint = configFingerprint();
+    }
+
+    /**
+     * 配置根目录：本地 config.yml 的 shared-config-path →
+     * 自动检测 /mc/shared/liusignin-config → 插件数据目录。
+     * 与 LiuLib 一致，shared-config-path 只从各服本地 config.yml 读取。
+     */
+    private void resolveConfigRoot() {
+        String configured = getConfig().getString("shared-config-path",
+                getConfig().getString("settings.shared-config-path", ""));
+        File root;
+        if (configured != null && !configured.isBlank()) {
+            File explicit = new File(configured.trim());
+            if (explicit.isDirectory()) {
+                getLogger().info("使用共享配置目录: " + explicit.getAbsolutePath());
+                root = explicit;
+            } else if (explicit.mkdirs()) {
+                getLogger().info("已创建共享配置目录: " + explicit.getAbsolutePath());
+                root = explicit;
+            } else {
+                getLogger().warning("共享配置目录不可用，回退插件目录: " + explicit.getAbsolutePath());
+                root = getDataFolder();
+            }
+        } else {
+            File auto = new File(AUTO_SHARED_CONFIG);
+            if (auto.isDirectory()) {
+                getLogger().info("检测到共享配置目录: " + auto.getAbsolutePath());
+                root = auto;
+            } else {
+                root = getDataFolder();
+            }
+        }
+        try {
+            root = root.getCanonicalFile();
+        } catch (IOException ignored) {
+            root = root.getAbsoluteFile();
+        }
+        File previous = this.configRoot;
+        this.configRoot = root;
+        if (previous == null || !previous.equals(root)) {
+            getLogger().info("配置目录: " + root.getAbsolutePath());
+        }
+    }
+
+    /** 给各服本地 bootstrap config.yml 补全新增键（含 shared-config-path），不覆盖用户值。 */
+    private void mergeLocalBootstrap() {
+        File local = new File(getDataFolder(), "config.yml");
+        if (!local.isFile()) {
+            return;
+        }
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.options().parseComments(true);
+        try {
+            yaml.load(local);
+        } catch (Exception error) {
+            getLogger().log(Level.WARNING, "本地 bootstrap config.yml 读取失败，跳过缺失键补全", error);
+            return;
+        }
+        int added = mergeMissingKeys(yaml, loadBundled("config.yml"));
+        if (added > 0 && saveAtomic(local, yaml)) {
+            getLogger().info("已为本地 " + local + " 补全 " + added + " 个缺失配置键");
+            reloadConfig();
+        }
+    }
+
+    private void loadRuntimeConfig() {
+        File configFile = file("config.yml");
+        YamlConfiguration loaded = new YamlConfiguration();
+        loaded.options().parseComments(true);
+        boolean parsed = false;
+        try {
+            if (configFile.isFile()) {
+                loaded.load(configFile);
+                parsed = true;
+            }
+        } catch (Exception error) {
+            getLogger().log(Level.SEVERE, "config.yml 读取失败，使用内置默认配置", error);
+        }
+        YamlConfiguration defaults = loadBundled("config.yml");
+        if (!parsed) {
+            this.runtimeConfig = defaults;
+            return;
+        }
+        int added = mergeMissingKeys(loaded, defaults);
+        if (added > 0) {
+            if (saveAtomic(configFile, loaded)) {
+                getLogger().info("已为 " + configFile + " 补全 " + added + " 个缺失配置键");
+            } else {
+                getLogger().warning("配置缺失键补全后保存失败: " + configFile);
+            }
+        }
+        this.runtimeConfig = loaded;
+    }
+
+    private YamlConfiguration loadBundled(String name) {
+        try (InputStream stream = getResource(name)) {
+            if (stream == null) {
+                return new YamlConfiguration();
+            }
+            return YamlConfiguration.loadConfiguration(
+                    new InputStreamReader(stream, StandardCharsets.UTF_8));
+        } catch (Exception error) {
+            getLogger().log(Level.WARNING, "读取内置配置失败: " + name, error);
+            return new YamlConfiguration();
+        }
+    }
+
+    private boolean copyBundled(String name, File target, boolean replace) {
+        if (!replace && target.exists()) {
+            return false;
+        }
+        try (InputStream stream = getResource(name)) {
+            if (stream == null) {
+                getLogger().warning("jar 内缺少默认配置资源: " + name);
+                return false;
+            }
+            File parent = target.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                getLogger().warning("无法创建配置目录: " + parent);
+                return false;
+            }
+            Files.copy(stream, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (IOException error) {
+            getLogger().log(Level.WARNING, "复制默认配置失败: " + name, error);
+            return false;
+        }
     }
 
     private void saveIfMissing(String name) {
-        File file = new File(getDataFolder(), name);
-        if (!file.exists()) {
-            saveResource(name, false);
-        }
+        copyBundled(name, file(name), false);
     }
 
     /**
@@ -187,19 +342,149 @@ public final class LiuSigninPlugin extends JavaPlugin {
         if (version >= MENUS_VERSION) {
             return;
         }
-        File backup = new File(getDataFolder(), "menus-v" + version + "-backup.yml");
+        File backup = new File(menusFile.getParentFile(), "menus-v" + version + "-backup.yml");
         try {
             Files.copy(menusFile.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            saveResource("menus.yml", true);
-            getLogger().info("menus.yml 已升级到 v" + MENUS_VERSION
-                    + "，旧配置备份为 " + backup.getName());
-        } catch (IOException | IllegalArgumentException error) {
+            if (copyBundled("menus.yml", menusFile, true)) {
+                getLogger().info("menus.yml 已升级到 v" + MENUS_VERSION
+                        + "，旧配置备份为 " + backup.getName());
+            }
+        } catch (IOException error) {
             getLogger().warning("menus.yml 升级失败，继续使用旧配置：" + error.getMessage());
         }
     }
 
+    private void startConfigWatcher() {
+        if (configRoot == null || runtimeConfig == null) {
+            return;
+        }
+        boolean enabled = getConfig().getBoolean("shared-config-watch", true)
+                && !sameFile(configRoot, getDataFolder());
+        if (enabled && configWatchTask != null && !configWatchTask.isCancelled()
+                && Objects.equals(watchedRoot, configRoot)) {
+            return;
+        }
+        stopConfigWatcher();
+        if (!enabled) {
+            return;
+        }
+        this.watchedRoot = configRoot;
+        this.watchedFingerprint = configFingerprint();
+        this.configWatchTask = getServer().getScheduler().runTaskTimerAsynchronously(
+                this, this::pollConfigChanges, CONFIG_WATCH_TICKS, CONFIG_WATCH_TICKS);
+    }
+
+    private void stopConfigWatcher() {
+        BukkitTask task = this.configWatchTask;
+        this.configWatchTask = null;
+        this.watchedRoot = null;
+        this.configReloadQueued = false;
+        if (task != null) {
+            task.cancel();
+        }
+    }
+
+    private void pollConfigChanges() {
+        if (configReloadQueued || configRoot == null || !isEnabled()) {
+            return;
+        }
+        long stamp = configFingerprint();
+        if (stamp == watchedFingerprint) {
+            return;
+        }
+        this.watchedFingerprint = stamp;
+        this.configReloadQueued = true;
+        try {
+            getServer().getScheduler().runTask(this, () -> {
+                try {
+                    reloadEverything();
+                } finally {
+                    configReloadQueued = false;
+                }
+            });
+        } catch (RuntimeException error) {
+            configReloadQueued = false;
+        }
+    }
+
+    private long configFingerprint() {
+        long latest = 0L;
+        for (String name : new String[]{"config.yml", "rewards.yml", "menus.yml", "messages.yml"}) {
+            File current = file(name);
+            if (current.isFile()) {
+                latest = Math.max(latest, current.lastModified());
+            }
+        }
+        // 共享模式下也监听本服 bootstrap config.yml，改路径后无需重启即可切目录
+        File local = new File(getDataFolder(), "config.yml");
+        if (local.isFile()) {
+            latest = Math.max(latest, local.lastModified());
+        }
+        return latest;
+    }
+
+    private boolean sameFile(File first, File second) {
+        try {
+            return first.getCanonicalFile().equals(second.getCanonicalFile());
+        } catch (IOException ignored) {
+            return first.getAbsoluteFile().equals(second.getAbsoluteFile());
+        }
+    }
+
+    /** 只补缺失键，不覆盖用户值；与 LiuLib Configs.mergeMissingKeys 行为一致。 */
+    private int mergeMissingKeys(ConfigurationSection current, ConfigurationSection defaults) {
+        if (current == null || defaults == null) {
+            return 0;
+        }
+        int added = 0;
+        for (String key : defaults.getKeys(true)) {
+            try {
+                if (defaults.isConfigurationSection(key)) {
+                    if (!current.isConfigurationSection(key) && !current.contains(key)) {
+                        current.createSection(key);
+                        added++;
+                    }
+                    continue;
+                }
+                if (!current.contains(key)) {
+                    current.set(key, defaults.get(key));
+                    added++;
+                }
+            } catch (RuntimeException conflict) {
+                // 用户把 section 写成标量（或反之）：保留用户值
+            }
+        }
+        return added;
+    }
+
+    private boolean saveAtomic(File target, YamlConfiguration yaml) {
+        if (target == null || yaml == null) {
+            return false;
+        }
+        try {
+            File parent = target.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                return false;
+            }
+            Path temporary = target.toPath().resolveSibling(
+                    target.getName() + "." + UUID.randomUUID() + ".tmp");
+            yaml.save(temporary.toFile());
+            try {
+                Files.move(temporary, target.toPath(), StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException atomicUnsupported) {
+                Files.move(temporary, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            return true;
+        } catch (Throwable error) {
+            getLogger().warning("保存配置失败: " + target + " (" + error.getMessage() + ")");
+            return false;
+        }
+    }
+
     private File file(String name) {
-        return new File(getDataFolder(), name);
+        File root = configRoot;
+        return new File(root == null ? getDataFolder() : root, name);
     }
 
     // ==================================================================
