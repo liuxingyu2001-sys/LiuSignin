@@ -2,6 +2,7 @@ package com.liuxingyu.liusignin.reward;
 
 import com.liuxingyu.liulib.item.ItemService;
 import com.liuxingyu.liulib.item.ItemSpec;
+import org.bukkit.Material;
 
 import java.util.Locale;
 
@@ -84,6 +85,18 @@ public record Reward(Type type, String value, double amount, String mode) {
 
     /** 玩家可读的奖励摘要（月历 lore / 聊天消息）。 */
     public String describe(ItemService items) {
+        return describe(items, false);
+    }
+
+    /**
+     * GUI / 聊天用摘要：原版物品输出客户端翻译标签（{@code <lang:item.minecraft.diamond>}），
+     * 中文客户端显示“钻石”，英文客户端显示“Diamond”，不再依赖服务端语言文件。
+     */
+    public String describeForDisplay(ItemService items) {
+        return describe(items, true);
+    }
+
+    private String describe(ItemService items, boolean clientTranslated) {
         return switch (type) {
             case MONEY -> "金币 " + formatNumber(amount);
             case EXP -> "经验 " + formatNumber(amount);
@@ -94,9 +107,22 @@ public record Reward(Type type, String value, double amount, String mode) {
                 if (spec == null) {
                     yield "物品 " + value;
                 }
-                String label = spec.isEncoded()
-                        ? "自定义物品"
-                        : items.names().labelById(spec.canonicalId());
+                String label = null;
+                if (clientTranslated && spec.isVanilla()) {
+                    try {
+                        Material material = Material.matchMaterial(spec.id());
+                        if (material != null && !material.isAir()) {
+                            label = "<lang:" + material.getTranslationKey() + ">";
+                        }
+                    } catch (RuntimeException ignored) {
+                        // 回退到 LiuLib 的普通名称
+                    }
+                }
+                if (label == null) {
+                    label = spec.isEncoded()
+                            ? "自定义物品"
+                            : items.names().labelById(spec.canonicalId());
+                }
                 yield spec.amount() > 1 ? label + " x" + spec.amount() : label;
             }
         };

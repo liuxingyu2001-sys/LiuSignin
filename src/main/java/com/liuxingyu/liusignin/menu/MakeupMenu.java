@@ -53,7 +53,7 @@ public final class MakeupMenu {
         List<Reward> rewards = plugin.rewards().rewardsFor(
                 group, rewardDate, previewStreak, state.data().total() + 1);
         placeholders.put("reward", rewards.isEmpty() ? "无" : rewards.stream()
-                .map(reward -> reward.describe(plugin.items()))
+                .map(reward -> reward.describeForDisplay(plugin.items()))
                 .collect(java.util.stream.Collectors.joining("，")));
 
         SparrowUi.MenuBuilder menu = ui.menu(

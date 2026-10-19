@@ -233,7 +233,7 @@ public final class SigninMenu {
             return "无";
         }
         return rewards.stream()
-                .map(reward -> reward.describe(plugin.items()))
+                .map(reward -> reward.describeForDisplay(plugin.items()))
                 .collect(java.util.stream.Collectors.joining("，"));
     }
 

@@ -4,7 +4,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 - 包名：`com.liuxingyu.liusignin`
 - 命令：`/signin`（别名 `/sign`、`/qd`、`/qiandao`）
-- 版本：`1.0.3`
+- 版本：`1.0.4`
 - 硬依赖：[LiuLib](../LiuLib)（MySQL 连接池 / Redis / Sparrow UI / 物品解析）
 
 ---
@@ -52,7 +52,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 ## 安装
 
-1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.3.jar` 放入 `plugins/`。
+1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.4.jar` 放入 `plugins/`。
 2. 启动一次服务器，生成 `plugins/LiuSignin/config.yml`、`rewards.yml`、`menus.yml`、`messages.yml`。
 3. 按需修改配置，`/signin reload` 重载（表前缀变更会重新建表）。
 4. 多台子服共用同一个 MySQL 库，并保持 `timezone`、`reset-time`、`table-prefix` 完全一致。
@@ -276,7 +276,7 @@ public void onSignin(PlayerSigninEvent event) {
 
 ```bash
 mvn clean package
-# 产物：target/LiuSignin-1.0.3.jar
+# 产物：target/LiuSignin-1.0.4.jar
 ```
 
 单元测试覆盖奖励 DSL、月历/无限奖励计算、签到日重置逻辑：

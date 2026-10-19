@@ -104,7 +104,7 @@ public final class RewardService {
                             plugin.mailbox().addAsync(player.getUniqueId(), MailEntry.item(encoded));
                             mailed++;
                         }
-                        summaries.add(reward.describe(items));
+                        summaries.add(reward.describeForDisplay(items));
                     }
                     case COMMAND -> {
                         String command = Text.fill(reward.value(),
