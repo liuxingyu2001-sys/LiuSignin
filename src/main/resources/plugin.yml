@@ -1,0 +1,61 @@
+name: LiuSignin
+version: '${project.version}'
+main: com.liuxingyu.liusignin.LiuSigninPlugin
+api-version: '1.21'
+authors: [liuxingyu2001]
+description: 每日签到 —— 月历 / 无限递增奖励、补签、多服 MySQL 共享、Sparrow UI
+website: 'https://github.com/liuxingyu2001'
+folia-supported: false
+
+# 前置公共库（提供 MySQL / Redis / Sparrow UI / 物品解析）
+depend:
+  - LiuLib
+
+# 可选：经济与占位符，缺失时对应功能降级
+softdepend:
+  - Vault
+  - PlaceholderAPI
+  - CraftEngine
+
+commands:
+  signin:
+    description: 每日签到
+    usage: /signin help
+    aliases: [sign, qd, qiandao]
+
+permissions:
+  liusignin.sign:
+    description: 允许签到
+    default: true
+  liusignin.gui:
+    description: 打开签到界面
+    default: true
+  liusignin.makeup:
+    description: 使用补签
+    default: true
+  liusignin.mail:
+    description: 打开签到邮箱
+    default: true
+  liusignin.leaderboard:
+    description: 查看签到排行
+    default: true
+  liusignin.reward.vip:
+    description: 使用 VIP 奖励组
+    default: false
+  liusignin.bypass.cooldown:
+    description: 跳过签到冷却
+    default: op
+  liusignin.admin:
+    description: 管理命令（reload / reset / card / purge / dbtest）
+    default: op
+  liusignin.*:
+    description: 全部权限
+    default: op
+    children:
+      liusignin.sign: true
+      liusignin.gui: true
+      liusignin.makeup: true
+      liusignin.mail: true
+      liusignin.leaderboard: true
+      liusignin.reward.vip: true
+      liusignin.admin: true

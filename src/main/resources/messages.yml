@@ -1,0 +1,66 @@
+# LiuSignin 消息（MiniMessage 格式）
+# 可用占位符：{player} {streak} {total} {best} {cards} {date} {rewards} {days} {cost} {rank}
+
+prefix: '<gradient:#5ee7df:#b490ca>[签到]</gradient> '
+
+no-permission: '<red>你没有权限执行这个命令。</red>'
+player-only: '<red>该命令只能由玩家执行。</red>'
+unknown-command: '<red>未知子命令，使用 <white>/signin help</white> 查看帮助。</red>'
+error: '<red>操作失败，请稍后重试或联系管理员。</red>'
+db-not-ready: '<red>数据库暂不可用，签到功能已暂停。</red>'
+player-not-found: '<red>找不到玩家 <white>{player}</white>。</red>'
+loading: '<gray>正在加载数据…</gray>'
+
+signed: '<green>签到成功！</green> <gray>连续</gray> <yellow>{streak}</yellow> <gray>天，累计</gray> <yellow>{total}</yellow> <gray>天</gray> <dark_gray>|</dark_gray> <white>{rewards}</white>'
+already-signed: '<yellow>今天已经签到过了，明天再来吧。</yellow>'
+cooldown: '<red>操作太快了，请稍后再试。</red>'
+broadcast: '<yellow>{player}</yellow> <gray>完成了今日签到，连续</gray> <yellow>{streak}</yellow> <gray>天！</gray>'
+first-broadcast: '<gold>✦</gold> <yellow>{player}</yellow> <gray>成为今天第一个签到的玩家！</gray>'
+reminder: '<yellow>今天还没有签到哦，点击打开签到界面。</yellow>'
+reminder-hover: '<gray>点击签到</gray>'
+
+makeup-disabled: '<red>本服未开启补签。</red>'
+makeup-no-card: '<red>补签卡不足，需要 <white>{cost}</white> 张。</red>'
+makeup-already: '<red>{date} 已经签到过了。</red>'
+makeup-out-of-range: '<red>只能补签最近 <white>{days}</white> 天内的日期。</red>'
+makeup-future: '<red>不能补签未来的日期。</red>'
+makeup-success: '<green>补签成功！</green> <gray>{date}</gray> <dark_gray>|</dark_gray> <white>{rewards}</white>'
+makeup-bad-date: '<red>日期格式错误，请使用 <white>yyyy-MM-dd</white>。</red>'
+
+mail-empty: '<gray>邮箱里没有待领取的奖励。</gray>'
+mail-claimed: '<green>已领取：</green><white>{reward}</white>'
+mail-notice: '<gray>背包已满，奖励已暂存到签到邮箱（<white>{count}</white> 项）。</gray>'
+mail-full: '<red>背包已满，请先清理背包。</red>'
+mail-claim-all-done: '<green>已领取 <white>{count}</white> 项奖励。</green>'
+
+leaderboard-header: '<gold>签到排行 · {type}</gold>'
+leaderboard-entry: '<gray>#{rank} <white>{player}</white> <dark_gray>-</dark_gray> <yellow>{value}</yellow></gray>'
+leaderboard-empty: '<gray>暂无排行数据。</gray>'
+
+info: '<gray>玩家</gray> <white>{player}</white> <dark_gray>|</dark_gray> <gray>连续</gray> <yellow>{streak}</yellow> <gray>天</gray> <dark_gray>|</dark_gray> <gray>累计</gray> <yellow>{total}</yellow> <gray>天</gray> <dark_gray>|</dark_gray> <gray>最佳</gray> <yellow>{best}</yellow> <gray>天</gray> <dark_gray>|</dark_gray> <gray>补签卡</gray> <yellow>{cards}</yellow>'
+
+reload-success: '<green>配置已重载。</green>'
+reload-failed: '<red>配置重载失败，请查看控制台。</red>'
+card-given: '<green>已给 <white>{player}</white> 发放 <white>{amount}</white> 张补签卡。</green>'
+card-taken: '<green>已扣除 <white>{player}</white> <white>{amount}</white> 张补签卡。</green>'
+card-set: '<green>已将 <white>{player}</white> 的补签卡设置为 <white>{amount}</white>。</green>'
+card-insufficient: '<red>操作失败：该玩家补签卡不足。</red>'
+reset-done: '<green>已重置 <white>{player}</white> 的签到数据。</green>'
+set-done: '<green>已设置 <white>{player}</white> 的 {field} 为 <white>{value}</white>。</green>'
+purged: '<green>已清理 <white>{count}</white> 条早于 {date} 的签到日志。</green>'
+db-ok: '<green>数据库连接正常。</green>'
+db-fail: '<red>数据库连接失败：{error}</red>'
+vault-missing: '<red>未检测到 Vault 经济插件，金币奖励已存入邮箱，请安装经济插件后领取。</red>'
+
+# 奖励摘要分隔符
+reward-separator: '<dark_gray>, </dark_gray>'
+
+help:
+  - '<gradient:#5ee7df:#b490ca>LiuSignin</gradient> <dark_gray>·</dark_gray> <gray>每日签到</gray>'
+  - '<yellow>/signin</yellow> <dark_gray>-</dark_gray> <gray>打开签到界面</gray>'
+  - '<yellow>/signin claim</yellow> <dark_gray>-</dark_gray> <gray>直接签到</gray>'
+  - '<yellow>/signin makeup [yyyy-MM-dd]</yellow> <dark_gray>-</dark_gray> <gray>补签（默认昨天）</gray>'
+  - '<yellow>/signin mail</yellow> <dark_gray>-</dark_gray> <gray>领取邮箱</gray>'
+  - '<yellow>/signin top [streak|total]</yellow> <dark_gray>-</dark_gray> <gray>查看排行</gray>'
+  - '<yellow>/signin info [玩家]</yellow> <dark_gray>-</dark_gray> <gray>查看签到信息</gray>'
+  - '<gray>管理员：reload / reset / card / purge / dbtest</gray>'

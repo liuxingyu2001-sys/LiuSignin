@@ -1,0 +1,84 @@
+# LiuSignin 奖励表
+#
+# 奖励写法（字符串 DSL）：
+#   money:1000                 金币（Vault）
+#   exp:50                     经验点
+#   card:1                     补签卡
+#   item:DIAMOND*3             原版物品（* 或 : 表示数量）
+#   item:ce:namespace:id*1     CraftEngine 物品
+#   item:base64:....           完整 NBT 物品
+#   cmd:console: say hi        控制台执行（默认就是 console，可省略）
+#   cmd:player: menu           玩家身份执行
+#
+# 可用占位符：{player} {uuid} {streak} {total} {date}
+#
+# 奖励组按 priority 从高到低匹配；permission 为空表示所有玩家可用。
+# 每个组必须选择一种模式：
+#   calendar  30 天月历：按“日期号”发奖（1~31），漏签补签也按该日期号
+#   infinite  无限递增：按连续签到天数递增，天数越高奖励越多，可设上限
+
+groups:
+  # ============================ 普通玩家：30 天月历 ============================
+  default:
+    priority: 0
+    permission: ''
+    mode: calendar
+    calendar:
+      # 未配置的日期号使用 default（没有 default 时沿用最近的已配置档位）
+      default: ['money:500']
+      1: ['money:500']
+      2: ['money:600']
+      3: ['money:700', 'exp:10']
+      4: ['money:800']
+      5: ['money:900', 'item:IRON_INGOT*8']
+      6: ['money:1000', 'exp:15']
+      7: ['money:1500', 'item:GOLD_INGOT*8', 'exp:20']
+      8: ['money:800']
+      9: ['money:900']
+      10: ['money:1000', 'exp:20']
+      11: ['money:1100']
+      12: ['money:1200', 'item:IRON_INGOT*16']
+      13: ['money:1300', 'exp:25']
+      14: ['money:2000', 'item:GOLD_INGOT*16', 'exp:30']
+      15: ['money:1200']
+      16: ['money:1300']
+      17: ['money:1400', 'exp:30']
+      18: ['money:1500', 'item:IRON_INGOT*24']
+      19: ['money:1600', 'exp:35']
+      20: ['money:1700', 'item:GOLD_INGOT*24', 'exp:40']
+      21: ['money:2500', 'item:DIAMOND*8', 'exp:50']
+      22: ['money:1500']
+      23: ['money:1600', 'exp:40']
+      24: ['money:1700', 'item:DIAMOND*4']
+      25: ['money:1800', 'exp:45']
+      26: ['money:1900', 'item:DIAMOND*6', 'exp:50']
+      27: ['money:2000', 'exp:55']
+      28: ['money:3000', 'item:DIAMOND*12', 'exp:60']
+      29: ['money:2500', 'item:DIAMOND*10', 'exp:70']
+      30: ['money:5000', 'item:DIAMOND*32', 'exp:100', 'card:1']
+      31: ['money:3000', 'item:DIAMOND*16', 'exp:80']
+
+  # ============================ VIP：无限递增 ============================
+  vip:
+    priority: 100
+    permission: 'liusignin.reward.vip'
+    mode: infinite
+    infinite:
+      # 连续签到第 n 天：金币 = min(max, base + per-day * (n - 1))
+      money:
+        base: 1000
+        per-day: 200
+        max: 10000
+      exp:
+        base: 10
+        per-day: 5
+        max: 300
+      # 每天都额外发放
+      extras:
+        - 'card:1'
+      # 达到指定连续天数时叠加，永久生效（不是只发一次）
+      tiers:
+        7: ['item:GOLD_INGOT*16']
+        14: ['item:DIAMOND*8']
+        21: ['item:DIAMOND*16']
+        30: ['item:NETHERITE_INGOT*2']

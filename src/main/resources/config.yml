@@ -1,0 +1,72 @@
+# LiuSignin 主配置
+# 依赖：LiuLib（MySQL / Redis / Sparrow UI / 物品解析）
+# 多台子服必须共用同一份 MySQL 与 Redis，并保持 timezone / reset-time 一致。
+
+settings:
+  # 签到日按该时区计算，跨服务必统一
+  timezone: 'Asia/Shanghai'
+  # 每日重置时间（HH:mm）。00:00 表示自然日；04:00 表示凌晨 4 点前算前一天
+  reset-time: '00:00'
+
+  # 进服自动签到
+  auto-sign:
+    enabled: false
+    # 延迟多少 tick 后执行，给登录插件/数据加载留时间
+    delay-ticks: 40
+
+  # 全服广播
+  broadcast:
+    sign: false          # 每次签到都广播
+    first-of-day: true   # 每天第一个签到的玩家广播
+
+  # 进服提醒（今日未签到时）
+  reminder:
+    on-join: true
+    # 延迟 tick
+    delay-ticks: 60
+
+  # 防连点：同一玩家两次签到操作的最小间隔（毫秒）
+  cooldown-ms: 1500
+
+  # 排行榜缓存秒数
+  leaderboard-refresh-seconds: 30
+
+  # 邮箱
+  mailbox:
+    # 进服自动领取暂存奖励
+    auto-claim-on-join: true
+    # 单次最多领取数量
+    claim-batch: 45
+
+  # 调试日志
+  debug: false
+
+database:
+  # 表名前缀；多台子服必须一致。
+  # 连接参数（host / port / database / username / password / 连接池）复用
+  # LiuLib 的 config.yml: mysql 段，本插件不重复配置。
+  table-prefix: 'liusignin_'
+  # 签到日志保留天数（/signin purge 使用；0 = 不自动限制）
+  log-retain-days: 180
+
+makeup:
+  # 是否开启补签
+  enabled: true
+  # 最多可补签最近多少天（不含今天）
+  max-days: 7
+  # 每次补签消耗的补签卡数量
+  cards-per-makeup: 1
+  # 补签“昨天”等紧邻日期时是否续接连续天数
+  keep-streak: true
+  # true = 发放补签日期对应的奖励；false = 发放今天所在档位的奖励
+  reward-from-date: true
+
+recovery:
+  # 服务端在“签到已入库、奖励未标记发放完成”之间异常退出时，
+  # 玩家下次进服重试 pending 记录（极小概率重复发奖，换取不丢奖）
+  retry-pending: true
+
+rewards:
+  # 奖励组配置见 rewards.yml
+  # 兜底奖励：奖励表缺少对应档位时发放
+  fallback: []
