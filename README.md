@@ -4,7 +4,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 - 包名：`com.liuxingyu.liusignin`
 - 命令：`/signin`（别名 `/sign`、`/qd`、`/qiandao`）
-- 版本：`1.0.4`
+- 版本：`1.0.5`
 - 硬依赖：[LiuLib](../LiuLib)（MySQL 连接池 / Redis / Sparrow UI / 物品解析）
 
 ---
@@ -17,13 +17,13 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 | 无限递增 | 按连续签到天数递增金币/经验，可设上限与阶段奖励 |
 | 奖励组 | 按权限 + priority 匹配，例如普通玩家走月历、VIP 走无限递增 |
 | 共享配置 | 多台子服可共用同一份 yml，自动复制、补键与热重载 |
-| 补签 | 消耗补签卡补最近 N 天；紧邻上次签到时可续连 |
+| 补签 | 消耗补签卡补最近 N 天（可跨月，受 `max-days` 限制）；紧邻上次签到时可续连 |
 | 签到邮箱 | 背包装不下的物品、Vault 不可用时的金币自动暂存，可单领/一键领取 |
 | 多服共享 | 所有数据在 MySQL，`(uuid, sign_date)` 唯一键裁决并发；Redis Pub/Sub 通知他服丢缓存 |
-| 自动签到 / 提醒 | 进服延迟自动签到、未签到点击提醒 |
+| 自动签到 / 提醒 | 进服延迟自动签到；未签到收到多行提醒（随机文案），点击打开月历；同一天跨子服只提醒一次 |
 | 排行 / 统计 | 连续、累计排行榜；今日签到人数 |
 | PlaceholderAPI | `%liusignin_*%` 变量 |
-| 开发者事件 | `PlayerSigninEvent`（成功入库、发奖前触发） |
+| 开发者接口 | `LiuSigninApi` 服务 + `PlayerSigninEvent` 事件 |
 
 > GUI 只使用 LiuLib 的 **Sparrow UI**，没有原版 Inventory 回退。Sparrow 不可用时相关界面会提示错误。
 
@@ -52,7 +52,7 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 
 ## 安装
 
-1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.4.jar` 放入 `plugins/`。
+1. 把 `LiuLib-1.0.0.jar` 与 `LiuSignin-1.0.5.jar` 放入 `plugins/`。
 2. 启动一次服务器，生成 `plugins/LiuSignin/config.yml`、`rewards.yml`、`menus.yml`、`messages.yml`。
 3. 按需修改配置，`/signin reload` 重载（表前缀变更会重新建表）。
 4. 多台子服共用同一个 MySQL 库，并保持 `timezone`、`reset-time`、`table-prefix` 完全一致。
@@ -126,9 +126,11 @@ settings:
   broadcast:
     sign: false               # 每次签到都广播
     first-of-day: true        # 每天第一个签到广播
+  # 提醒文案在 messages.yml 的 reminder / reminder-quotes 中配置
   reminder:
     on-join: true
     delay-ticks: 60
+    once-per-day: true        # 同一天跨子服只提醒一次；false = 每次进服都提醒
   cooldown-ms: 1500
   leaderboard-refresh-seconds: 30
   mailbox:
@@ -154,6 +156,8 @@ rewards:
 ```
 
 签到日算法：`今天 = 配置时区的日期`；若当地时刻早于 `reset-time`，日期减一天。多台子服必须使用相同的 `timezone` 与 `reset-time`，否则会出现“这服能签、那服不能签”。
+
+补签范围只由 `makeup.max-days` 决定，**不限制自然月**。例如今天是 10 月 3 日、`max-days: 7`，9 月 26 日也在可补范围内；月历翻到上个月，灰显的 `missed-locked` 日期才是超出范围。若希望只能补本月，需要在 `SigninService.makeup` 另外增加月份校验。
 
 ### `rewards.yml`
 
@@ -253,10 +257,81 @@ MiniMessage 格式，`{player}`、`{streak}`、`{rewards}` 等占位符。修改
 | `liusignin_log` | 签到记录，`(uuid, sign_date)` 主键，兼作防重复闸门与发奖状态 |
 | `liusignin_stats` | 每日签到人数 |
 | `liusignin_mailbox` | 暂存奖励（物品 base64 / 金币 / 经验） |
+| `liusignin_reminder` | 进服提醒去重，`(uuid, reminder_date)` 主键 |
+
+### 进服提醒文案
+
+`messages.yml`：
+
+- `reminder`：多行主模板，支持 `{intro}`、`{progress}`、`{quote}` 占位符；
+- `reminder-quotes`：随机鼓励文案列表，每次发送随机取一条；
+- `reminder-hover`：鼠标悬停提示。
+
+升级插件时会自动补全缺失的 `reminder-quotes`，并将旧版默认单行 `reminder` 升级为多行模板；手动改过的 `reminder` 不会被覆盖。
+
+### 数据存储优化
+
+- 玩家档案读取改为「先 SELECT，命中即返回」，日常加载不再每次执行 `INSERT IGNORE` 写库。
+- 排行榜使用 `idx_rank_streak` / `idx_rank_total` 复合索引；待发奖查询使用 `idx_uuid_status`；邮箱列表使用 `idx_uuid_id`。老库启动时会自动补建，DDL 失败只告警，不阻断启动。
+- 邮箱一键领取改为一条 `DELETE ... WHERE uuid = ? AND id IN (...)` 批量清理，避免每条邮件一次 DELETE。
+- 提醒去重单独建表，不污染玩家档案；`/signin reset` 与 `/signin purge` 会同步清理。
 
 ---
 
 ## 开发者
+
+### 服务 API
+
+通过 Bukkit 服务管理器获取，适合签到查询、代签到、发补签卡、打开界面等联动。调用方在 `plugin.yml` 中声明依赖：
+
+```yaml
+depend: [LiuSignin]
+```
+
+Java：
+
+```java
+LiuSigninApi api = Bukkit.getServicesManager().load(LiuSigninApi.class);
+if (api == null) {
+    return;
+}
+
+// 只读缓存，未加载返回 null
+LiuSigninApi.Profile cached = api.cachedProfile(player.getUniqueId());
+boolean signed = api.isSignedToday(player.getUniqueId());
+
+// 异步查 MySQL
+api.profile(player.getUniqueId()).thenAccept(profile -> {
+    int streak = profile.streak();
+    int cards = profile.makeupCards();
+});
+
+api.isSigned(player.getUniqueId(), LocalDate.now()).thenAccept(historySigned -> {
+    // ...
+});
+
+// 代签到 / 补签：必须在玩家所在线程调用
+api.sign(player).thenAccept(result -> {
+    if (result.status() == LiuSigninApi.SigninStatus.SUCCESS) {
+        int streak = result.streak();
+    }
+});
+api.makeup(player, LocalDate.now().minusDays(1));
+
+// 补签卡
+api.addMakeupCards(player.getUniqueId(), 1);
+api.takeMakeupCards(player.getUniqueId(), 1);
+api.setMakeupCards(player.getUniqueId(), 5);
+
+// 打开界面（自动切回玩家线程）
+api.openMenu(player);
+api.openMakeupMenu(player, LocalDate.now().minusDays(1));
+api.openMailbox(player);
+```
+
+- `profile` / `isSigned` / 补签卡方法返回 `CompletableFuture`，不要在主线程阻塞等待。
+- `sign` / `makeup` 会操作背包与 Vault，必须在玩家所在线程调用；事件 `PlayerSigninEvent` 仍会正常触发，来源为 `SignSource.API` / `MAKEUP`。
+- API 实现随插件启用注册，插件停用后自动注销。
 
 ### 事件
 
@@ -276,7 +351,7 @@ public void onSignin(PlayerSigninEvent event) {
 
 ```bash
 mvn clean package
-# 产物：target/LiuSignin-1.0.4.jar
+# 产物：target/LiuSignin-1.0.5.jar
 ```
 
 单元测试覆盖奖励 DSL、月历/无限奖励计算、签到日重置逻辑：

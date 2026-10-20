@@ -16,8 +16,22 @@ already-signed: '<yellow>今天已经签到过了，明天再来吧。</yellow>'
 cooldown: '<red>操作太快了，请稍后再试。</red>'
 broadcast: '<yellow>{player}</yellow> <gray>完成了今日签到，连续</gray> <yellow>{streak}</yellow> <gray>天！</gray>'
 first-broadcast: '<gold>✦</gold> <yellow>{player}</yellow> <gray>成为今天第一个签到的玩家！</gray>'
-reminder: '<yellow>今天还没有签到哦，点击打开签到界面。</yellow>'
-reminder-hover: '<gray>点击签到</gray>'
+reminder: |-
+  <gradient:#5ee7df:#b490ca><bold>今日签到提醒</bold></gradient>
+  <dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━</dark_gray>
+  <gray>  {intro}</gray>
+  <gray>  {progress}</gray>
+  <gray>  <italic>“{quote}”</italic></gray>
+  <green>  ▶ 点击这条消息，打开签到日历</green>
+  <dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━</dark_gray>
+reminder-hover: |-
+  <gray>点击打开签到界面</gray>
+  <dark_gray>今日奖励等你领取</dark_gray>
+reminder-quotes:
+  - '每天一点坚持，终会汇成星光。'
+  - '签到不是任务，是送给未来自己的小礼物。'
+  - '今天的努力，会在某一天悄悄开花。'
+  - '别让今天的奖励，等到明天才想起。'
 
 makeup-disabled: '<red>本服未开启补签。</red>'
 makeup-no-card: '<red>补签卡不足，需要 <white>{cost}</white> 张。</red>'

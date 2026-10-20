@@ -35,7 +35,7 @@ public record SigninConfig(
     public record Broadcast(boolean sign, boolean firstOfDay) {
     }
 
-    public record Reminder(boolean onJoin, int delayTicks) {
+    public record Reminder(boolean onJoin, int delayTicks, boolean oncePerDay) {
     }
 
     public record Mailbox(boolean autoClaimOnJoin, int claimBatch) {
@@ -62,7 +62,8 @@ public record SigninConfig(
                 ),
                 new Reminder(
                         yaml.getBoolean("settings.reminder.on-join", true),
-                        Math.max(1, yaml.getInt("settings.reminder.delay-ticks", 60))
+                        Math.max(1, yaml.getInt("settings.reminder.delay-ticks", 60)),
+                        yaml.getBoolean("settings.reminder.once-per-day", true)
                 ),
                 Math.max(0, yaml.getInt("settings.cooldown-ms", 1500)),
                 Math.max(5, yaml.getInt("settings.leaderboard-refresh-seconds", 30)),
@@ -92,7 +93,7 @@ public record SigninConfig(
                 LocalTime.MIDNIGHT,
                 new AutoSign(false, 40),
                 new Broadcast(false, true),
-                new Reminder(true, 60),
+                new Reminder(true, 60, true),
                 1500,
                 30,
                 new Mailbox(true, 45),

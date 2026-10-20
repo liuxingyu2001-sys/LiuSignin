@@ -79,16 +79,31 @@ public final class MailboxService {
                     CompletableFuture<Integer> future = new CompletableFuture<>();
                     Schedulers.onPlayer(plugin, player, () -> {
                         int claimed = 0;
+                        List<Long> claimedIds = new ArrayList<>();
                         for (MailEntry entry : entries) {
                             if (!deliver(player, entry)) {
                                 break;
                             }
                             claimed++;
-                            long id = entry.id();
-                            Schedulers.asyncRun(plugin, () -> plugin.store().deleteMail(id, uuid));
+                            claimedIds.add(entry.id());
                         }
-                        claiming.remove(uuid);
-                        future.complete(claimed);
+                        if (claimedIds.isEmpty()) {
+                            claiming.remove(uuid);
+                            future.complete(0);
+                            return;
+                        }
+                        // 一条 DELETE ... IN (...) 完成清理；删完再释放 claiming，避免重复领取
+                        final int delivered = claimed;
+                        final List<Long> ids = List.copyOf(claimedIds);
+                        Schedulers.asyncRun(plugin, () -> plugin.store().deleteMails(uuid, ids))
+                                .whenComplete((ignored, error) -> {
+                                    if (error != null) {
+                                        plugin.getLogger().warning("清理已领取邮件失败（"
+                                                + uuid + "）：" + error.getMessage());
+                                    }
+                                    claiming.remove(uuid);
+                                    future.complete(delivered);
+                                });
                     });
                     return future;
                 })

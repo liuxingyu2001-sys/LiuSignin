@@ -8,6 +8,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 /**
@@ -41,6 +42,15 @@ public final class Messages {
     /** 不带前缀的消息。 */
     public Component raw(String key, String... pairs) {
         return parse(Text.fill(yaml.getString(key, ""), pairs));
+    }
+
+    /** 从消息列表随机取一行原始文本；列表为空返回空串。 */
+    public String randomLine(String key) {
+        List<String> lines = yaml.getStringList(key);
+        if (lines.isEmpty()) {
+            return "";
+        }
+        return lines.get(ThreadLocalRandom.current().nextInt(lines.size()));
     }
 
     /** 列表消息（帮助、排行榜等）。 */

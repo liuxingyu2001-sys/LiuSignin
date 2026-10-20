@@ -8,6 +8,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -72,6 +74,10 @@ public final class SigninStore {
         return table("mailbox");
     }
 
+    private String reminderTable() {
+        return table("reminder");
+    }
+
     // ==================================================================
     // 初始化
     // ==================================================================
@@ -89,7 +95,9 @@ public final class SigninStore {
                 + "`updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"
                 + "PRIMARY KEY (`uuid`),"
                 + "KEY `idx_streak` (`streak`),"
-                + "KEY `idx_total` (`total`)"
+                + "KEY `idx_total` (`total`),"
+                + "KEY `idx_rank_streak` (`streak`, `total`, `updated_at`),"
+                + "KEY `idx_rank_total` (`total`, `streak`, `updated_at`)"
                 + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         mysql.execute("CREATE TABLE IF NOT EXISTS " + logTable() + " ("
@@ -103,7 +111,8 @@ public final class SigninStore {
                 + "`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                 + "PRIMARY KEY (`uuid`, `sign_date`),"
                 + "KEY `idx_date` (`sign_date`),"
-                + "KEY `idx_status` (`status`)"
+                + "KEY `idx_status` (`status`),"
+                + "KEY `idx_uuid_status` (`uuid`, `status`, `sign_date`)"
                 + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         mysql.execute("CREATE TABLE IF NOT EXISTS " + statsTable() + " ("
@@ -118,8 +127,66 @@ public final class SigninStore {
                 + "`payload` MEDIUMTEXT NOT NULL,"
                 + "`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
                 + "PRIMARY KEY (`id`),"
-                + "KEY `idx_uuid` (`uuid`)"
+                + "KEY `idx_uuid` (`uuid`),"
+                + "KEY `idx_uuid_id` (`uuid`, `id`)"
                 + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // 进服提醒去重：同一签到日只允许一台子服抢到提醒名额。
+        mysql.execute("CREATE TABLE IF NOT EXISTS " + reminderTable() + " ("
+                + "`uuid` CHAR(36) NOT NULL,"
+                + "`reminder_date` DATE NOT NULL,"
+                + "`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                + "PRIMARY KEY (`uuid`, `reminder_date`),"
+                + "KEY `idx_reminder_date` (`reminder_date`)"
+                + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        ensureIndexes();
+    }
+
+    /**
+     * 老表补建排行 / 待发奖 / 邮箱复合索引，避免 ORDER BY 全表排序。
+     * MySQL 不支持 IF NOT EXISTS 建索引，先查 information_schema；失败只告警，
+     * 不让旧库因为 DDL 权限不足而无法启动。
+     */
+    private void ensureIndexes() {
+        ensureIndex("player", "idx_rank_streak", "`streak`, `total`, `updated_at`");
+        ensureIndex("player", "idx_rank_total", "`total`, `streak`, `updated_at`");
+        ensureIndex("log", "idx_uuid_status", "`uuid`, `status`, `sign_date`");
+        ensureIndex("mailbox", "idx_uuid_id", "`uuid`, `id`");
+    }
+
+    private void ensureIndex(String name, String index, String columns) {
+        try {
+            Integer exists = mysql.queryOne(
+                    "SELECT COUNT(*) FROM information_schema.statistics"
+                            + " WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?",
+                    rs -> rs.getInt(1), prefix + name, index);
+            if (exists != null && exists > 0) {
+                return;
+            }
+            mysql.execute("ALTER TABLE " + table(name) + " ADD INDEX `" + index + "` (" + columns + ")");
+            logger.info("已补充索引 " + prefix + name + "." + index);
+        } catch (RuntimeException error) {
+            logger.warning("补充索引失败 " + prefix + name + "." + index + "："
+                    + error.getMessage());
+        }
+    }
+
+    /**
+     * 抢占某签到日的“进服提醒”名额。
+     *
+     * <p>多台子服共用 MySQL 时，{@code (uuid, reminder_date)} 主键保证只有
+     * 一台能插入成功；玩家切换子服后不会再次收到同一天的提醒。</p>
+     *
+     * @return true 表示本次由当前子服提醒
+     */
+    public boolean claimReminder(UUID uuid, LocalDate date) {
+        if (uuid == null || date == null) {
+            return false;
+        }
+        return mysql.update("INSERT IGNORE INTO " + reminderTable()
+                        + " (`uuid`, `reminder_date`) VALUES (?, ?)",
+                uuid.toString(), Date.valueOf(date)) > 0;
     }
 
     public boolean ping() {
@@ -130,19 +197,24 @@ public final class SigninStore {
     // 玩家档案
     // ==================================================================
 
-    /** 读取档案；不存在时自动建档。 */
+    /** 读取档案；不存在时自动建档。已存在时只读，不再每次写 INSERT IGNORE。 */
     public PlayerSigninData load(UUID uuid) {
         String id = uuid.toString();
+        PlayerSigninData data = selectPlayer(id, uuid);
+        if (data != null) {
+            return data;
+        }
         mysql.update("INSERT IGNORE INTO " + playerTable() + " (`uuid`, `name`) VALUES (?, '')", id);
-        PlayerSigninData data = mysql.queryOne(
+        data = selectPlayer(id, uuid);
+        return data == null ? new PlayerSigninData(uuid) : data;
+    }
+
+    private PlayerSigninData selectPlayer(String id, UUID uuid) {
+        return mysql.queryOne(
                 "SELECT `name`, `last_sign_date`, `streak`, `best_streak`, `total`, `makeup_cards`"
                         + " FROM " + playerTable() + " WHERE `uuid` = ?",
                 rs -> mapPlayer(rs, uuid),
                 id);
-        if (data == null) {
-            data = new PlayerSigninData(uuid);
-        }
-        return data;
     }
 
     private static PlayerSigninData mapPlayer(ResultSet rs, UUID uuid) throws SQLException {
@@ -383,6 +455,7 @@ public final class SigninStore {
     public int purgeBefore(LocalDate date) {
         int logs = mysql.update("DELETE FROM " + logTable() + " WHERE `sign_date` < ?", Date.valueOf(date));
         mysql.update("DELETE FROM " + statsTable() + " WHERE `stat_date` < ?", Date.valueOf(date));
+        mysql.update("DELETE FROM " + reminderTable() + " WHERE `reminder_date` < ?", Date.valueOf(date));
         return logs;
     }
 
@@ -417,6 +490,22 @@ public final class SigninStore {
                 id, uuid.toString()) > 0;
     }
 
+    /** 批量删除已领取邮件，避免逐条 DELETE。 */
+    public int deleteMails(UUID uuid, Collection<Long> ids) {
+        if (uuid == null || ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        Object[] params = new Object[ids.size() + 1];
+        params[0] = uuid.toString();
+        int index = 1;
+        for (Long id : ids) {
+            params[index++] = id;
+        }
+        return mysql.update("DELETE FROM " + mailboxTable()
+                + " WHERE `uuid` = ? AND `id` IN (" + placeholders + ")", params);
+    }
+
     // ==================================================================
     // 管理
     // ==================================================================
@@ -432,6 +521,11 @@ public final class SigninStore {
             }
             try (PreparedStatement ps = connection.prepareStatement(
                     "DELETE FROM " + mailboxTable() + " WHERE `uuid` = ?")) {
+                ps.setString(1, id);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "DELETE FROM " + reminderTable() + " WHERE `uuid` = ?")) {
                 ps.setString(1, id);
                 ps.executeUpdate();
             }

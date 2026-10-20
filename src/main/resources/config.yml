@@ -33,6 +33,9 @@ settings:
     on-join: true
     # 延迟 tick
     delay-ticks: 60
+    # true = 同一个签到日多台子服只提醒一次（跨服切换不重复）
+    # false = 每次进服都提醒（切换子服会重复）
+    once-per-day: true
 
   # 防连点：同一玩家两次签到操作的最小间隔（毫秒）
   cooldown-ms: 1500

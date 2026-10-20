@@ -4,7 +4,7 @@
 
 ```bash
 cd /home/liu/plugins/LiuSignin
-mvn clean package     # 产物 target/LiuSignin-1.0.4.jar
+mvn clean package     # 产物 target/LiuSignin-1.0.5.jar
 mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组）
 ```
 
@@ -26,7 +26,14 @@ mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组�
 - 签到成功与否由 `liusignin_log (uuid, sign_date)` 主键裁决，禁止改成“先查缓存再写”。
 - 玩家档案累加与日志写入必须在同一事务内（见 `SigninStore.beginSign/beginMakeup`）。
 - 任何写操作完成后调用 `plugin.sync().publishInvalidate(uuid)` 通知其它子服。
+- 进服提醒去重依赖 `liusignin_reminder (uuid, reminder_date)` 主键；不要改回内存状态。
 - 表名统一带 `database.table-prefix`，使用反引号拼接；前缀已在 `SigninConfig.sanitizePrefix` 过滤。
+
+## 对外接口
+
+- 公共 API 是 `api/LiuSigninApi`，通过 Bukkit `ServicesManager` 注册；新增/修改方法要同步 README「服务 API」。
+- API 查询返回 `CompletableFuture`；`sign` / `makeup` 必须在玩家线程调用，界面方法内部切回玩家线程。
+- 签到事件保持 `PlayerSigninEvent` 不可取消语义，不要绕过它直接改档案。
 
 ## 线程
 
@@ -44,4 +51,4 @@ mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组�
 ## 发布
 
 - 未经用户明确要求，不复制 jar 到服务器、不提交、不推送。
-- 版本号变更遵循用户指示；默认 `1.0.4`。
+- 版本号变更遵循用户指示；默认 `1.0.5`。

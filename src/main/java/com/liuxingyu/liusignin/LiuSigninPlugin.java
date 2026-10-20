@@ -5,6 +5,8 @@ import com.liuxingyu.liulib.api.LiuLibApi;
 import com.liuxingyu.liulib.item.ItemService;
 import com.liuxingyu.liulib.storage.MySql;
 import com.liuxingyu.liulib.ui.SparrowUi;
+import com.liuxingyu.liusignin.api.LiuSigninApi;
+import com.liuxingyu.liusignin.api.LiuSigninApiImpl;
 import com.liuxingyu.liusignin.command.SigninCommand;
 import com.liuxingyu.liusignin.config.SigninConfig;
 import com.liuxingyu.liusignin.data.SigninStore;
@@ -25,6 +27,7 @@ import com.liuxingyu.liusignin.util.Messages;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -67,6 +70,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
     private volatile VaultHook vault;
     private volatile CrossServerSync sync;
     private volatile SigninCommand command;
+    private volatile LiuSigninApi pluginApi;
 
     private volatile ItemService items;
     private volatile SparrowUi sparrow;
@@ -94,6 +98,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
             saveIfMissing("menus.yml");
             migrateMenus();
             saveIfMissing("messages.yml");
+            mergeMessages();
             loadRuntimeConfig();
 
             MySql mysql = api.mysql();
@@ -121,6 +126,10 @@ public final class LiuSigninPlugin extends JavaPlugin {
             this.signinMenu = new SigninMenu(this);
             this.makeupMenu = new MakeupMenu(this);
             this.mailMenu = new MailMenu(this);
+
+            this.pluginApi = new LiuSigninApiImpl(this);
+            getServer().getServicesManager().register(
+                    LiuSigninApi.class, pluginApi, this, ServicePriority.Normal);
 
             this.command = new SigninCommand(this);
             PluginCommand pluginCommand = getCommand("signin");
@@ -164,6 +173,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
         if (sync != null) {
             sync.stop();
         }
+        getServer().getServicesManager().unregisterAll(this);
         getLogger().info("LiuSignin 已停用");
     }
 
@@ -177,6 +187,7 @@ public final class LiuSigninPlugin extends JavaPlugin {
         saveIfMissing("menus.yml");
         migrateMenus();
         saveIfMissing("messages.yml");
+        mergeMessages();
         loadRuntimeConfig();
         SigninConfig fresh = SigninConfig.load(runtimeConfig == null ? getConfig() : runtimeConfig);
         this.config = fresh;
@@ -287,6 +298,42 @@ public final class LiuSigninPlugin extends JavaPlugin {
             }
         }
         this.runtimeConfig = loaded;
+    }
+
+    /**
+     * 补全 messages.yml 新增键，并把旧版默认单行 reminder 升级为多行模板。
+     * 用户自定义过的 reminder 不覆盖，只补缺失的 reminder-quotes 等键。
+     */
+    private void mergeMessages() {
+        File target = file("messages.yml");
+        if (!target.isFile()) {
+            return;
+        }
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.options().parseComments(true);
+        try {
+            yaml.load(target);
+        } catch (Exception error) {
+            getLogger().log(Level.WARNING, "messages.yml 读取失败，跳过缺失消息补全", error);
+            return;
+        }
+        YamlConfiguration defaults = loadBundled("messages.yml");
+        int added = mergeMissingKeys(yaml, defaults);
+        String oldReminder = "<yellow>今天还没有签到哦，点击打开签到界面。</yellow>";
+        boolean upgraded = oldReminder.equals(yaml.getString("reminder"))
+                && defaults.contains("reminder");
+        if (upgraded) {
+            yaml.set("reminder", defaults.getString("reminder"));
+        }
+        if (added == 0 && !upgraded) {
+            return;
+        }
+        if (saveAtomic(target, yaml)) {
+            getLogger().info("已更新 messages.yml：补全 " + added + " 个键"
+                    + (upgraded ? "，并升级签到提醒模板" : ""));
+        } else {
+            getLogger().warning("messages.yml 更新后保存失败");
+        }
     }
 
     private YamlConfiguration loadBundled(String name) {
@@ -497,6 +544,11 @@ public final class LiuSigninPlugin extends JavaPlugin {
 
     public SigninTime time() {
         return time;
+    }
+
+    /** 对外服务 API；其它插件通过 Bukkit ServicesManager 获取。 */
+    public LiuSigninApi api() {
+        return pluginApi;
     }
 
     public Messages messages() {
