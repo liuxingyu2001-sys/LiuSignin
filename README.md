@@ -5,7 +5,8 @@ Minecraft **每日签到**插件（Paper 1.21+）。月历 / 无限递增两套�
 - 包名：`com.liuxingyu.liusignin`
 - 命令：`/signin`（别名 `/sign`、`/qd`、`/qiandao`）
 - 版本：`1.0.5`
-- 硬依赖：[LiuLib](../LiuLib)（MySQL 连接池 / Redis / Sparrow UI / 物品解析）
+- 硬依赖：[LiuLib](../LiuLib) 1.0.5+（MySQL 连接池 / Redis / Sparrow UI / 物品规格解析）
+- 软依赖：[liuitemlib](../liuitemlib)（可选，安装后奖励/菜单物品可用 `lib:` 引用物品库）
 
 ---
 
@@ -169,7 +170,10 @@ exp:50                      经验点
 card:1                      补签卡
 item:DIAMOND*3              原版物品（* 或 : 表示数量）
 item:ce:namespace:id*1      CraftEngine 物品
-item:base64:....            LiuLib 完整物品编码
+item:base64:....            LiuLib 完整物品编码（CE/NBT/数据组件全保真）
+item:nbt:....               LiuLib 完整物品编码（旧写法，等价 base64）
+item:item:base64:....       带 item: 前缀的完整物品规格（兼容旧配置）
+item:lib:gift:spring_2026   物品库引用（需安装 liuitemlib）
 cmd:console: say hi         控制台执行（默认 console）
 cmd:player: menu            玩家身份执行
 ```
@@ -211,6 +215,8 @@ groups:
 月历采用「左侧 7 列日期 + 右侧单列侧栏」：侧栏只保留签到统计、补签卡、今日奖励、排行、邮箱、翻月和关闭，日期格子不再塞长奖励文本，改用染料颜色区分状态（绿=已签、红=漏签、灰=未来、绿宝石=今天）。
 
 物品支持 `material` 或 LiuLib `item` 规格，名称/lore 使用 MiniMessage，并统一关闭物品默认斜体。
+
+`item` / `material` / `background` 都支持 LiuLib 完整物品规格：`DIAMOND`、`minecraft:diamond`、`DIAMOND*3`、`ce:命名空间:id`、`base64:...`、`nbt:...`、`item:base64:...`，以及 `lib:<物品库ID>`（需安装 liuitemlib，已声明 softdepend 保证先启用）。插件总是先交给 LiuLib 解析，解析失败再按原版材质名兜底，旧配置行为不变。
 
 `menus.yml` 带有 `menus-version`。插件升级检测到旧版结构时，会把旧文件备份为 `menus-v<旧版本>-backup.yml`，再写入新版默认布局；自定义过的旧配置可从备份中手动合并。
 

@@ -83,7 +83,10 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
         String backgroundName = section == null ? "BLACK_STAINED_GLASS_PANE"
                 : section.getString("background", "BLACK_STAINED_GLASS_PANE");
         Material backgroundMaterial = Material.matchMaterial(backgroundName);
-        ItemTemplate background = new ItemTemplate("", backgroundMaterial == null
+        // background 也支持 LiuLib 完整物品规格（如 ce:ns:id / base64:... / lib:...）：
+        // ItemTemplate 会先交给 LiuLib 解析，失败再回退到下面的原版材质。
+        String backgroundSpec = backgroundName == null ? "" : backgroundName.trim();
+        ItemTemplate background = new ItemTemplate(backgroundSpec, backgroundMaterial == null
                 ? Material.BLACK_STAINED_GLASS_PANE : backgroundMaterial, "", List.of(), false);
 
         Map<String, Integer> slots = new LinkedHashMap<>();
@@ -224,7 +227,14 @@ public record MenuConfig(Calendar calendar, Makeup makeup, Mail mail) {
             lore = defaultLore;
         }
         boolean glow = section == null ? defaultGlow : section.getBoolean("glow", defaultGlow);
-        return new ItemTemplate(item, material, name, List.copyOf(lore), glow);
+        // material 保留原来的材质名兼容，同时允许写 LiuLib 完整物品规格
+        // （base64: / nbt: / ce:ns:id / lib:物品库ID）。item 优先，material 仅在 item 为空时作为规格来源；
+        // ItemTemplate.build 先走 LiuLib 解析，失败再回退到已解析出的原版材质。
+        String itemSpec = item == null ? "" : item.trim();
+        if (itemSpec.isEmpty() && materialName != null && !materialName.isBlank()) {
+            itemSpec = materialName.trim();
+        }
+        return new ItemTemplate(itemSpec, material, name, List.copyOf(lore), glow);
     }
 
     private static int clamp(int value, int min, int max) {

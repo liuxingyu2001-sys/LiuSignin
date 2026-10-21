@@ -11,8 +11,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.util.List;
 
 /**
- * 菜单物品模板：支持 LiuLib 物品规格（CE / base64）或原版材质，
- * 名称与 lore 使用 MiniMessage 解析。
+ * 菜单物品模板：支持 LiuLib 完整物品规格（材质 / CE / base64 / nbt / {@code lib:物品库ID}）
+ * 或原版材质，名称与 lore 使用 MiniMessage 解析。
  */
 public record ItemTemplate(
         String item,

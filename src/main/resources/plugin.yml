@@ -16,6 +16,8 @@ softdepend:
   - Vault
   - PlaceholderAPI
   - CraftEngine
+  # 物品库：先于本插件启用，`lib:<物品ID>` 规格才能解析
+  - liuitemlib
 
 commands:
   signin:

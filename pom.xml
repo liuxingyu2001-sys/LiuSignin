@@ -6,7 +6,7 @@
 
   <groupId>com.liuxingyu</groupId>
   <artifactId>LiuSignin</artifactId>
-  <version>1.0.5</version>
+  <version>1.0.6</version>
   <packaging>jar</packaging>
 
   <name>LiuSignin</name>
@@ -16,7 +16,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>21</maven.compiler.release>
     <paper.version>1.21.11-R0.1-SNAPSHOT</paper.version>
-    <liulib.version>1.0.0</liulib.version>
+    <liulib.version>1.0.5</liulib.version>
     <vault.version>1.7.1</vault.version>
     <papi.version>2.11.6</papi.version>
     <junit.version>5.10.1</junit.version>
