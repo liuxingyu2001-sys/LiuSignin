@@ -9,6 +9,7 @@ import com.liuxingyu.liusignin.api.LiuSigninApi;
 import com.liuxingyu.liusignin.api.LiuSigninApiImpl;
 import com.liuxingyu.liusignin.command.SigninCommand;
 import com.liuxingyu.liusignin.config.SigninConfig;
+import com.liuxingyu.liusignin.data.SigninDatabase;
 import com.liuxingyu.liusignin.data.SigninStore;
 import com.liuxingyu.liusignin.hook.PlaceholderHook;
 import com.liuxingyu.liusignin.hook.VaultHook;
@@ -100,24 +101,33 @@ public final class LiuSigninPlugin extends JavaPlugin {
             saveIfMissing("messages.yml");
             mergeMessages();
             loadRuntimeConfig();
+            this.config = SigninConfig.load(runtimeConfig);
 
-            MySql mysql = api.mysql();
-            if (mysql == null || !mysql.isReady()) {
+            MySql library = api.mysql();
+            if (library == null || !library.isReady()) {
                 getLogger().severe("LiuLib 的 MySQL 未启用或连接失败，请在 LiuLib/config.yml 配置 mysql 后重启");
                 getServer().getPluginManager().disablePlugin(this);
                 return;
             }
+            MySql mysql = SigninDatabase.open(library.config(), config, getLogger());
+            if (mysql == null) {
+                getLogger().severe("无法连接本插件数据库 " + config.databaseName()
+                        + "（凭据复用 LiuLib 的 mysql 段，库名/前缀见 LiuSignin/config.yml: database）");
+                getServer().getPluginManager().disablePlugin(this);
+                return;
+            }
+            if (config.migrateFromLiulib()) {
+                SigninDatabase.migrate(library, mysql, config.tablePrefix(), getLogger());
+            }
+            this.store = new SigninStore(mysql, getLogger(), config.tablePrefix());
+            this.store.init();
 
-            this.config = SigninConfig.load(runtimeConfig);
             this.time = new SigninTime(config.timezone(), config.resetTime());
             this.messages = Messages.load(file("messages.yml"), items, getLogger());
             this.rewards = RewardTable.load(
                     YamlConfiguration.loadConfiguration(file("rewards.yml")),
                     config.fallbackRewards(), getLogger());
             this.menus = MenuConfig.load(YamlConfiguration.loadConfiguration(file("menus.yml")));
-
-            this.store = new SigninStore(mysql, getLogger(), config.tablePrefix());
-            this.store.init();
 
             this.vault = new VaultHook();
             this.service = new SigninService(this);
@@ -173,6 +183,9 @@ public final class LiuSigninPlugin extends JavaPlugin {
         if (sync != null) {
             sync.stop();
         }
+        if (store != null) {
+            store.close();
+        }
         getServer().getServicesManager().unregisterAll(this);
         getLogger().info("LiuSignin 已停用");
     }
@@ -189,8 +202,13 @@ public final class LiuSigninPlugin extends JavaPlugin {
         saveIfMissing("messages.yml");
         mergeMessages();
         loadRuntimeConfig();
+        SigninConfig previous = this.config;
         SigninConfig fresh = SigninConfig.load(runtimeConfig == null ? getConfig() : runtimeConfig);
         this.config = fresh;
+        if (previous != null && !previous.databaseName().equalsIgnoreCase(fresh.databaseName())) {
+            getLogger().warning("database.name 已改为 " + fresh.databaseName()
+                    + "，需要重启服务器才会切换数据库（当前仍连接旧库）");
+        }
         this.time = new SigninTime(fresh.timezone(), fresh.resetTime());
         this.messages = Messages.load(file("messages.yml"), items, getLogger());
         this.rewards = RewardTable.load(

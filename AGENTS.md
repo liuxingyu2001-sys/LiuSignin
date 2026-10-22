@@ -4,7 +4,7 @@
 
 ```bash
 cd /home/liu/plugins/LiuSignin
-mvn clean package     # 产物 target/LiuSignin-1.0.5.jar
+mvn clean package     # 产物 target/LiuSignin-1.0.6.jar
 mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组）
 ```
 
@@ -14,8 +14,8 @@ mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组�
 
 ## 依赖边界
 
-- **LiuLib 是硬依赖**：MySQL、Redis、Sparrow UI、物品解析都走 `LiuLib.api()`。
-- 不在本插件里直接创建 HikariCP / Jedis；不要新增 SQLite 回退。
+- **LiuLib 是硬依赖**：MySQL 连接凭据、Redis、Sparrow UI、物品解析都走 `LiuLib.api()`。
+- 不直接 new HikariCP / Jedis；用 LiuLib 的 `MySql` 类持有本插件自己的连接池（凭据取 LiuLib `mysql` 段，库名/前缀由本插件 `config.yml: database` 决定），不要把表写回 LiuLib 的 `liulib` 库；不要新增 SQLite 回退。
 - GUI 只用 Sparrow（`LiuLib.sparrow()`），不要写原版 Inventory 兜底。
 - Vault 通过反射访问，避免未安装 Vault 时类加载失败；不要直接 import `net.milkbowl.vault.**`。
 - PlaceholderAPI 只在检测到插件后实例化 expansion。
@@ -27,7 +27,8 @@ mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组�
 - 玩家档案累加与日志写入必须在同一事务内（见 `SigninStore.beginSign/beginMakeup`）。
 - 任何写操作完成后调用 `plugin.sync().publishInvalidate(uuid)` 通知其它子服。
 - 进服提醒去重依赖 `liusignin_reminder (uuid, reminder_date)` 主键；不要改回内存状态。
-- 表名统一带 `database.table-prefix`，使用反引号拼接；前缀已在 `SigninConfig.sanitizePrefix` 过滤。
+- 表名统一带 `database.table-prefix`，使用反引号拼接；前缀已在 `SigninConfig.sanitizePrefix` 过滤；库名由 `database.name` 决定（`SigninConfig.sanitizeDatabase`）。
+- 旧版把表写在 LiuLib 的 `liulib` 库；`SigninDatabase.migrate` 只补缺失表，不改新库已有数据，迁移失败只告警不阻断启动。
 
 ## 对外接口
 
@@ -51,4 +52,4 @@ mvn test              # 纯逻辑单元测试（奖励 DSL / 时间 / 奖励组�
 ## 发布
 
 - 未经用户明确要求，不复制 jar 到服务器、不提交、不推送。
-- 版本号变更遵循用户指示；默认 `1.0.5`。
+- 版本号变更遵循用户指示；默认 `1.0.6`。

@@ -54,10 +54,19 @@ settings:
   debug: false
 
 database:
-  # 表名前缀；多台子服必须一致。
-  # 连接参数（host / port / database / username / password / 连接池）复用
-  # LiuLib 的 config.yml: mysql 段，本插件不重复配置。
+  # 连接参数（host / port / username / password / use-ssl / 连接池）复用
+  # LiuLib 的 config.yml: mysql 段；这里只决定本插件自己的库名与表前缀，
+  # 不再把表写进 LiuLib 的 liulib 库。
+  # 多台子服必须使用同一个 name + table-prefix。
+  name: 'liusignin'
   table-prefix: 'liusignin_'
+  # 库不存在时自动 CREATE DATABASE（账号需要有权限）
+  auto-create-database: true
+  # 0 = 跟随 LiuLib 的 mysql.pool-size / connection-timeout-ms
+  pool-size: 0
+  connection-timeout-ms: 0
+  # 首次升级时把旧 liulib 库里的 liusignin_* 表复制到新库（只补缺失的表）
+  migrate-from-liulib: true
   # 签到日志保留天数（/signin purge 使用；0 = 不自动限制）
   log-retain-days: 180
 

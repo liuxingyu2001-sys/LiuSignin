@@ -23,6 +23,11 @@ public record SigninConfig(
         Mailbox mailbox,
         boolean debug,
         String tablePrefix,
+        String databaseName,
+        boolean autoCreateDatabase,
+        int poolSize,
+        int connectionTimeoutMs,
+        boolean migrateFromLiulib,
         int logRetainDays,
         Makeup makeup,
         boolean retryPending,
@@ -73,6 +78,11 @@ public record SigninConfig(
                 ),
                 yaml.getBoolean("settings.debug", false),
                 sanitizePrefix(yaml.getString("database.table-prefix", "liusignin_")),
+                sanitizeDatabase(yaml.getString("database.name", "liusignin")),
+                yaml.getBoolean("database.auto-create-database", true),
+                Math.max(0, yaml.getInt("database.pool-size", 0)),
+                Math.max(0, yaml.getInt("database.connection-timeout-ms", 0)),
+                yaml.getBoolean("database.migrate-from-liulib", true),
                 Math.max(0, yaml.getInt("database.log-retain-days", 180)),
                 new Makeup(
                         yaml.getBoolean("makeup.enabled", true),
@@ -99,6 +109,11 @@ public record SigninConfig(
                 new Mailbox(true, 45),
                 false,
                 "liusignin_",
+                "liusignin",
+                true,
+                0,
+                0,
+                true,
                 180,
                 new Makeup(true, 7, 1, true, true),
                 true,
@@ -129,6 +144,12 @@ public record SigninConfig(
     private static String sanitizePrefix(String raw) {
         String prefix = raw == null ? "" : raw.trim().replaceAll("[^A-Za-z0-9_]", "");
         return prefix.isEmpty() ? "liusignin_" : prefix;
+    }
+
+    /** 库名同样只允许字母、数字、下划线；留空时回退 liusignin。 */
+    private static String sanitizeDatabase(String raw) {
+        String name = raw == null ? "" : raw.trim().replaceAll("[^A-Za-z0-9_]", "");
+        return name.isEmpty() ? "liusignin" : name;
     }
 
     /** 兼容旧配置读取方式。 */

@@ -38,6 +38,10 @@ public final class SigninStore {
         ERROR
     }
 
+    /** 本插件使用的表名（不含前缀），迁移/巡检时共用。 */
+    public static final List<String> TABLES =
+            List.of("player", "log", "stats", "mailbox", "reminder");
+
     private final MySql mysql;
     private final Logger logger;
     private volatile String prefix;
@@ -52,6 +56,11 @@ public final class SigninStore {
         if (prefix != null && !prefix.isBlank()) {
             this.prefix = prefix;
         }
+    }
+
+    /** 关闭本插件自己的连接池；由插件 onDisable 调用。 */
+    public void close() {
+        mysql.close();
     }
 
     private String table(String name) {
