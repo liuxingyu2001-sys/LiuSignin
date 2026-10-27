@@ -104,6 +104,11 @@ public final class MailboxService {
                                     claiming.remove(uuid);
                                     future.complete(delivered);
                                 });
+                    }).whenComplete((ignored, error) -> {
+                        if (error != null) {
+                            claiming.remove(uuid);
+                            future.completeExceptionally(error);
+                        }
                     });
                     return future;
                 })
@@ -111,7 +116,24 @@ public final class MailboxService {
     }
 
     public CompletableFuture<Integer> claimAll(Player player) {
-        return claim(player, null);
+        return claimAll(player, 0);
+    }
+
+    /**
+     * 递归领取直到邮箱为空、背包满或达到批次数上限。
+     * claim-batch 只是单次 SQL 上限；真正的“一键领取”不能只领 45 条。
+     */
+    private CompletableFuture<Integer> claimAll(Player player, int depth) {
+        if (player == null || !player.isOnline() || depth >= 20) {
+            return CompletableFuture.completedFuture(0);
+        }
+        int batch = plugin.config().mailbox().claimBatch();
+        return claim(player, null).thenCompose(count -> {
+            if (count <= 0 || count < batch || !player.isOnline()) {
+                return CompletableFuture.completedFuture(count);
+            }
+            return claimAll(player, depth + 1).thenApply(next -> count + next);
+        });
     }
 
     /** 玩家所在线程调用。返回 false 表示本条未领取（背包满 / 经济不可用），保留在邮箱。 */
@@ -125,24 +147,29 @@ public final class MailboxService {
                         plugin.getLogger().warning("签到邮箱中的物品已损坏，已跳过: " + entry.id());
                         return true;
                     }
-                    Map<Integer, ItemStack> leftover = player.getInventory().addItem(stack);
+                    // 整条放入或整条保留：不把装不下的部分异步回写邮箱。
+                    // 异步回写+删除原记录会在崩溃/断服时造成物品丢失或重复。
+                    ItemStack[] before = snapshot(player.getInventory().getStorageContents());
+                    Map<Integer, ItemStack> leftover;
+                    try {
+                        leftover = player.getInventory().addItem(stack);
+                    } catch (RuntimeException error) {
+                        restore(player, before);
+                        throw error;
+                    }
                     if (!leftover.isEmpty()) {
-                        // 装不下的部分重新写回邮箱，避免“部分放入、整条重领”的刷物品漏洞
-                        for (ItemStack remain : leftover.values()) {
-                            String encoded = items.codec().encode(remain);
-                            if (encoded == null) {
-                                plugin.getLogger().warning("邮箱物品回写编码失败：" + remain.getType());
-                                continue;
-                            }
-                            addAsync(player.getUniqueId(), MailEntry.item(encoded));
-                        }
-                        plugin.messages().send(player, "mail-notice",
-                                "count", String.valueOf(leftover.size()));
+                        restore(player, before);
+                        plugin.messages().send(player, "mail-full");
+                        return false;
                     }
                     return true;
                 }
                 case "money" -> {
                     double amount = Double.parseDouble(entry.value());
+                    if (!Double.isFinite(amount) || amount <= 0) {
+                        plugin.getLogger().warning("签到邮箱金币数额无效，已跳过: " + entry.id());
+                        return true;
+                    }
                     if (!vault.available()) {
                         plugin.messages().send(player, "vault-missing");
                         return false;
@@ -156,6 +183,10 @@ public final class MailboxService {
                 }
                 case "exp" -> {
                     int amount = Integer.parseInt(entry.value());
+                    if (amount <= 0) {
+                        plugin.getLogger().warning("签到邮箱经验数额无效，已跳过: " + entry.id());
+                        return true;
+                    }
                     player.giveExp(amount);
                     plugin.messages().send(player, "mail-claimed",
                             "reward", "经验 " + amount);
@@ -170,6 +201,18 @@ public final class MailboxService {
             plugin.getLogger().warning("领取邮箱条目失败（" + entry.payload() + "）：" + error.getMessage());
             return false;
         }
+    }
+
+    private static ItemStack[] snapshot(ItemStack[] contents) {
+        ItemStack[] copy = new ItemStack[contents.length];
+        for (int i = 0; i < contents.length; i++) {
+            copy[i] = contents[i] == null ? null : contents[i].clone();
+        }
+        return copy;
+    }
+
+    private static void restore(Player player, ItemStack[] before) {
+        player.getInventory().setStorageContents(before);
     }
 
     /** 避免依赖 Reward 的格式化方法造成循环。 */

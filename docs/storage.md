@@ -33,10 +33,10 @@ database:
 旧版本（≤ 1.0.5）把 `liusignin_*` 表写在 LiuLib 的库（通常是 `liulib`）里。1.0.6 首次启动时：
 
 1. 连接 LiuLib 的库，读取 `information_schema.TABLES`；
-2. 对 5 张表逐一检查新库是否已有；已有则跳过；
-3. 缺表时 `CREATE TABLE 新库.表 LIKE 旧库.表`，再 `INSERT IGNORE ... SELECT *`；
+2. 对 5 张表逐一检查新库是否已有数据；已有数据则跳过，缺表或空表则迁移；
+3. 缺表时 `CREATE TABLE 新库.表 LIKE 旧库.表`，再按两表同名列 `INSERT IGNORE ... SELECT`；
 4. 每张表记录迁移行数；失败只告警，不阻断启动；
-5. 重复启动不会重复迁移。
+5. 重复启动不会重复迁移；`log.total` 等新列由 `SigninStore.init()` 自动补齐。
 
 相关日志：
 
@@ -55,7 +55,7 @@ database:
 | 表 | 关键字段 | 用途 |
 |---|---|---|
 | `liusignin_player` | `uuid` PK, `name`, `last_sign_date`, `streak`, `best_streak`, `total`, `makeup_cards`, `updated_at` | 玩家档案 |
-| `liusignin_log` | `uuid` + `sign_date` 复合主键, `kind`, `streak`, `reward_group`, `status`, `server_id`, `created_at` | 签到记录、防重复闸门、发奖状态 |
+| `liusignin_log` | `uuid` + `sign_date` 复合主键, `kind`, `streak`, `total`, `reward_group`, `status`, `server_id`, `created_at` | 签到记录、防重复闸门、发奖状态、断线补发档位 |
 | `liusignin_stats` | `stat_date` PK, `sign_count` | 每日签到人数 |
 | `liusignin_mailbox` | `id` PK, `uuid`, `payload`, `created_at` | 暂存奖励（物品 base64 / 金币 / 经验） |
 | `liusignin_reminder` | `uuid` + `reminder_date` 复合主键, `created_at` | 进服提醒去重 |
@@ -98,6 +98,7 @@ database:
 ## 7. 数据存储优化（1.0.5+）
 
 - 玩家档案读取改为「先 SELECT，命中即返回」，日常加载不再每次执行 `INSERT IGNORE` 写库。
+- 签到日志保存 `total`，断线补发不再用连续天数冒充累计天数。
 - 排行榜、待发奖、邮箱列表使用复合索引，避免全表排序。
 - 邮箱一键领取改为一条 `DELETE ... WHERE uuid = ? AND id IN (...)` 批量清理。
 - 提醒去重单独建表，不污染玩家档案；`/signin reset` 与 `/signin purge` 会同步清理。

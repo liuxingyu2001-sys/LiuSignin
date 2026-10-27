@@ -7,6 +7,7 @@ import java.util.UUID;
  * 一条签到记录。{@code (uuid, date)} 是数据库主键，也是跨服防重复签到的唯一裁决点。
  *
  * @param kind    normal / makeup / auto
+ * @param total   该次签到后的累计天数（断线补发奖励时用于还原奖励档位）
  * @param status  pending / granted / failed
  */
 public record SigninLog(
@@ -14,6 +15,7 @@ public record SigninLog(
         LocalDate date,
         String kind,
         int streak,
+        int total,
         String rewardGroup,
         String status,
         String serverId

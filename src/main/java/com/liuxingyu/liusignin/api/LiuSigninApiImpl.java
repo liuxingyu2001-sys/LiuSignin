@@ -31,7 +31,7 @@ public final class LiuSigninApiImpl implements LiuSigninApi {
 
     @Override
     public Profile cachedProfile(UUID uniqueId) {
-        PlayerState state = uniqueId == null ? null : plugin.service().cached(uniqueId);
+        PlayerState state = uniqueId == null ? null : plugin.service().cachedFresh(uniqueId);
         return state == null ? null : profile(state);
     }
 
@@ -96,7 +96,7 @@ public final class LiuSigninApiImpl implements LiuSigninApi {
 
     @Override
     public CompletableFuture<Integer> addMakeupCards(UUID uniqueId, int amount) {
-        if (uniqueId == null || amount <= 0) {
+        if (uniqueId == null) {
             return CompletableFuture.completedFuture(0);
         }
         return plugin.service().addCardsAsync(uniqueId, amount);
@@ -112,7 +112,7 @@ public final class LiuSigninApiImpl implements LiuSigninApi {
 
     @Override
     public CompletableFuture<Integer> setMakeupCards(UUID uniqueId, int amount) {
-        if (uniqueId == null || amount < 0) {
+        if (uniqueId == null) {
             return CompletableFuture.completedFuture(0);
         }
         return plugin.service().setCardsAsync(uniqueId, amount);

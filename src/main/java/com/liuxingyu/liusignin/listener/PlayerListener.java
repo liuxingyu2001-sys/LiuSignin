@@ -17,6 +17,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /** 进服加载缓存、自动签到、签到提醒、断线补偿与邮箱自动领取。 */
 public final class PlayerListener implements Listener {
@@ -83,9 +84,22 @@ public final class PlayerListener implements Listener {
                 return;
             }
             LocalDate today = plugin.time().today();
-            Schedulers.async(plugin, () -> plugin.store().claimReminder(uuid, today))
-                    .thenAccept(claimed -> {
+            Schedulers.async(plugin, () -> {
+                        // 跨服并发：本服缓存可能还是“未签到”，用权威日志再确认一次。
+                        if (plugin.store().hasLog(uuid, today)) {
+                            return false;
+                        }
+                        return plugin.store().claimReminder(uuid, today);
+                    })
+                    .thenCompose(claimed -> {
                         if (!claimed) {
+                            return CompletableFuture.completedFuture(false);
+                        }
+                        // 抢到提醒名额后、真正发送前再查一次，避免另一子服刚签到却仍提醒。
+                        return Schedulers.async(plugin, () -> !plugin.store().hasLog(uuid, today));
+                    })
+                    .thenAccept(shouldSend -> {
+                        if (!shouldSend) {
                             return;
                         }
                         Schedulers.onPlayer(plugin, player, () -> {

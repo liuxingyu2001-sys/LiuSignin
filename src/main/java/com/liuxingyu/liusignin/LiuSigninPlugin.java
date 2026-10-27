@@ -158,9 +158,12 @@ public final class LiuSigninPlugin extends JavaPlugin {
             PlaceholderHook.register(this);
             startConfigWatcher();
 
-            // 每 60 秒刷新一次“今日签到人数”缓存
-            getServer().getAsyncScheduler().runAtFixedRate(this,
-                    task -> service.refreshTodayCount(), 60L, 60L, TimeUnit.SECONDS);
+            // 每 60 秒刷新“今日签到人数”缓存，并清掉离线且过期的玩家状态，
+            // 避免 /signin info 或 API 查离线玩家后 Map 无限增长。
+            getServer().getAsyncScheduler().runAtFixedRate(this, task -> {
+                service.refreshTodayCount();
+                service.evictInactive();
+            }, 60L, 60L, TimeUnit.SECONDS);
 
             getLogger().info("LiuSignin 已启用：MySQL=" + mysql.config().host() + "/"
                     + mysql.config().database()

@@ -39,7 +39,7 @@ LiuLib 的 `mysql.database` 只决定 LiuLib 自己用哪个库，LiuSignin 不�
 
 ## 3. 安装步骤
 
-1. 把 `LiuLib-1.0.5.jar` 与 `LiuSignin-1.0.6.jar` 放入 `plugins/`。
+1. 把 `LiuLib-1.0.5.jar` 与 `LiuSignin-1.0.7.jar` 放入 `plugins/`。
 2. 配置 LiuLib 的 MySQL 并启动服务器。
 3. 首次启动会自动：
    - 创建 `liusignin` 库（`database.auto-create-database: true`，账号需要 `CREATE` 权限）；
@@ -58,13 +58,20 @@ LiuLib 的 `mysql.database` 只决定 LiuLib 自己用哪个库，LiuSignin 不�
 | 行为 | 说明 |
 |---|---|
 | 迁移范围 | `liusignin_player` / `liusignin_log` / `liusignin_stats` / `liusignin_mailbox` / `liusignin_reminder` |
-| 迁移方式 | 新库缺表时 `CREATE TABLE ... LIKE` + `INSERT IGNORE ... SELECT *` |
-| 不覆盖 | 新库已有表直接跳过，不会动新库已有数据 |
+| 迁移方式 | 新库缺表或空表时 `CREATE TABLE ... LIKE`，再按两表同名列 `INSERT IGNORE ... SELECT` |
+| 不覆盖 | 新库已有表且已有数据时跳过，不会动新库已有数据 |
 | 同库跳过 | 若 LiuLib 库名与本插件库名相同，不迁移 |
 | 失败处理 | 单表失败只告警并继续；旧数据仍保留在旧库，可手动复制 |
-| 幂等 | 重复启动不会重复迁移（表已存在即跳过） |
+| 幂等 | 重复启动不会重复迁移（非空表跳过） |
 
 迁移成功后旧 `liulib` 库中的 `liusignin_*` 表**不会自动删除**，确认数据无误后可手动清理。
+
+1.0.7 起 `liusignin_log` 新增 `total` 列；旧表启动时自动执行 `ALTER TABLE` 补齐，无需手动迁移。
+若 MySQL 账号没有 `ALTER` 权限，请先手动执行：
+
+```sql
+ALTER TABLE liusignin_log ADD COLUMN `total` INT NOT NULL DEFAULT 0 AFTER `streak`;
+```
 
 权限要求：LiuSignin 使用的 MySQL 账号需要能读旧库（`SELECT`）并在新库建表（`CREATE` / `INSERT`）。
 

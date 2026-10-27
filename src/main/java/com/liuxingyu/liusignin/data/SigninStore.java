@@ -114,6 +114,7 @@ public final class SigninStore {
                 + "`sign_date` DATE NOT NULL,"
                 + "`kind` VARCHAR(16) NOT NULL DEFAULT 'normal',"
                 + "`streak` INT NOT NULL DEFAULT 0,"
+                + "`total` INT NOT NULL DEFAULT 0,"
                 + "`reward_group` VARCHAR(64) NOT NULL DEFAULT '',"
                 + "`status` VARCHAR(16) NOT NULL DEFAULT 'pending',"
                 + "`server_id` CHAR(36) NOT NULL DEFAULT '',"
@@ -149,7 +150,23 @@ public final class SigninStore {
                 + "KEY `idx_reminder_date` (`reminder_date`)"
                 + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // 1.0.6 修复断线补发使用错误累计天数：旧表补 total 列；失败必须阻断启动，
+        // 否则新签到写入会因缺列持续失败。
+        ensureColumn("log", "total", "INT NOT NULL DEFAULT 0 AFTER `streak`");
+
         ensureIndexes();
+    }
+
+    private void ensureColumn(String name, String column, String definition) {
+        Integer exists = mysql.queryOne(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS"
+                        + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+                rs -> rs.getInt(1), prefix + name, column);
+        if (exists != null && exists > 0) {
+            return;
+        }
+        mysql.execute("ALTER TABLE " + table(name) + " ADD COLUMN `" + column + "` " + definition);
+        logger.info("已补充字段 " + prefix + name + "." + column);
     }
 
     /**
@@ -189,6 +206,17 @@ public final class SigninStore {
      *
      * @return true 表示本次由当前子服提醒
      */
+    /** 指定日期是否已有签到记录（权威判断，跨服提醒前复核用）。 */
+    public boolean hasLog(UUID uuid, LocalDate date) {
+        if (uuid == null || date == null) {
+            return false;
+        }
+        Integer value = mysql.queryOne("SELECT 1 FROM " + logTable()
+                        + " WHERE `uuid` = ? AND `sign_date` = ? LIMIT 1",
+                rs -> 1, uuid.toString(), Date.valueOf(date));
+        return value != null;
+    }
+
     public boolean claimReminder(UUID uuid, LocalDate date) {
         if (uuid == null || date == null) {
             return false;
@@ -250,19 +278,20 @@ public final class SigninStore {
      * 多台子服同时写入只有一台能成功；成功者才继续累加玩家数据并发放奖励。</p>
      */
     public SignOutcome beginSign(UUID uuid, String name, LocalDate date, int newStreak,
-                                 int newBest, String rewardGroup, String serverId) {
+                                 int newBest, int newTotal, String rewardGroup, String serverId) {
         String id = uuid.toString();
         return mysql.transaction(connection -> {
             int inserted;
             try (PreparedStatement ps = connection.prepareStatement(
                     "INSERT IGNORE INTO " + logTable()
-                            + " (`uuid`, `sign_date`, `kind`, `streak`, `reward_group`, `status`, `server_id`)"
-                            + " VALUES (?, ?, 'normal', ?, ?, 'pending', ?)")) {
+                            + " (`uuid`, `sign_date`, `kind`, `streak`, `total`, `reward_group`, `status`, `server_id`)"
+                            + " VALUES (?, ?, 'normal', ?, ?, ?, 'pending', ?)")) {
                 ps.setString(1, id);
                 ps.setDate(2, Date.valueOf(date));
                 ps.setInt(3, newStreak);
-                ps.setString(4, rewardGroup == null ? "" : rewardGroup);
-                ps.setString(5, serverId == null ? "" : serverId);
+                ps.setInt(4, newTotal);
+                ps.setString(5, rewardGroup == null ? "" : rewardGroup);
+                ps.setString(6, serverId == null ? "" : serverId);
                 inserted = ps.executeUpdate();
             }
             if (inserted == 0) {
@@ -305,7 +334,7 @@ public final class SigninStore {
      * @param advanceLast 补签日期紧邻上次签到日期时，是否把 last_sign_date / streak 推进
      */
     public MakeupOutcome beginMakeup(UUID uuid, String name, LocalDate date, int newStreak,
-                                     int newBest, String rewardGroup, String serverId,
+                                     int newBest, int newTotal, String rewardGroup, String serverId,
                                      int cardCost, boolean advanceLast) {
         String id = uuid.toString();
         try {
@@ -322,13 +351,14 @@ public final class SigninStore {
                 }
                 try (PreparedStatement ps = connection.prepareStatement(
                         "INSERT INTO " + logTable()
-                                + " (`uuid`, `sign_date`, `kind`, `streak`, `reward_group`, `status`, `server_id`)"
-                                + " VALUES (?, ?, 'makeup', ?, ?, 'pending', ?)")) {
+                                + " (`uuid`, `sign_date`, `kind`, `streak`, `total`, `reward_group`, `status`, `server_id`)"
+                                + " VALUES (?, ?, 'makeup', ?, ?, ?, 'pending', ?)")) {
                     ps.setString(1, id);
                     ps.setDate(2, Date.valueOf(date));
                     ps.setInt(3, newStreak);
-                    ps.setString(4, rewardGroup == null ? "" : rewardGroup);
-                    ps.setString(5, serverId == null ? "" : serverId);
+                    ps.setInt(4, newTotal);
+                    ps.setString(5, rewardGroup == null ? "" : rewardGroup);
+                    ps.setString(6, serverId == null ? "" : serverId);
                     try {
                         ps.executeUpdate();
                     } catch (SQLIntegrityConstraintViolationException duplicate) {
@@ -383,7 +413,8 @@ public final class SigninStore {
 
     /** 本服/其它服遗留的待发奖记录。 */
     public List<SigninLog> pending(UUID uuid) {
-        return mysql.query("SELECT `uuid`, `sign_date`, `kind`, `streak`, `reward_group`, `status`, `server_id`"
+        return mysql.query("SELECT `uuid`, `sign_date`, `kind`, `streak`, `total`,"
+                        + " `reward_group`, `status`, `server_id`"
                         + " FROM " + logTable()
                         + " WHERE `uuid` = ? AND `status` = 'pending' ORDER BY `sign_date` LIMIT 50",
                 rs -> new SigninLog(
@@ -391,9 +422,10 @@ public final class SigninStore {
                         rs.getDate(2).toLocalDate(),
                         rs.getString(3),
                         rs.getInt(4),
-                        rs.getString(5),
+                        rs.getInt(5),
                         rs.getString(6),
-                        rs.getString(7)),
+                        rs.getString(7),
+                        rs.getString(8)),
                 uuid.toString());
     }
 

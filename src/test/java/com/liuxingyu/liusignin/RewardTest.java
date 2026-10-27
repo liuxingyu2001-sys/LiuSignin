@@ -55,6 +55,8 @@ class RewardTest {
     void rejectsInvalidEntries() {
         assertThrows(IllegalArgumentException.class, () -> Reward.parse("diamond:3"));
         assertThrows(IllegalArgumentException.class, () -> Reward.parse("money:abc"));
+        assertThrows(IllegalArgumentException.class, () -> Reward.parse("money:NaN"));
+        assertThrows(IllegalArgumentException.class, () -> Reward.parse("exp:Infinity"));
         assertThrows(IllegalArgumentException.class, () -> Reward.parse("没有冒号"));
     }
 

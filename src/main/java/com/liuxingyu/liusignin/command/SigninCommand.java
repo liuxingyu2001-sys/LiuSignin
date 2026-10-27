@@ -90,7 +90,11 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
                         case NO_PERMISSION -> plugin.messages().send(sender, "no-permission");
                         case ERROR -> plugin.messages().send(sender, "error");
                     }
-                }));
+                }))
+                .exceptionally(error -> {
+                    fail(sender, error);
+                    return null;
+                });
     }
 
     private void menu(CommandSender sender) {
@@ -144,7 +148,11 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
                         case FUTURE -> plugin.messages().send(sender, "makeup-future");
                         case ERROR -> plugin.messages().send(sender, "error");
                     }
-                }));
+                }))
+                .exceptionally(error -> {
+                    fail(sender, error);
+                    return null;
+                });
     }
 
     private void mail(CommandSender sender, String[] args) {
@@ -165,7 +173,10 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
                             plugin.messages().send(player, "mail-claim-all-done",
                                     "count", String.valueOf(count));
                         }
-                    }));
+                    })).exceptionally(error -> {
+                fail(sender, error);
+                return null;
+            });
             return;
         }
         plugin.mailMenu().open(player);
@@ -192,7 +203,10 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
                         "player", entry.name() == null || entry.name().isBlank() ? "未知" : entry.name(),
                         "value", String.valueOf(total ? entry.total() : entry.streak()));
             }
-        }));
+        })).exceptionally(error -> {
+            fail(sender, error);
+            return null;
+        });
     }
 
     /** 供签到界面调用。 */
@@ -267,29 +281,52 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
             plugin.messages().send(sender, "player-not-found", "player", args[2]);
             return;
         }
+        boolean give = "give".equals(action) || "add".equals(action);
+        boolean take = "take".equals(action) || "remove".equals(action);
+        if (!give && !take && !"set".equals(action)) {
+            plugin.messages().send(sender, "unknown-command");
+            return;
+        }
+        if (amount < 0 || (give || take) && amount == 0) {
+            plugin.messages().send(sender, "invalid-amount");
+            return;
+        }
         UUID uuid = target.getUniqueId();
-        switch (action) {
-            case "give", "add" -> plugin.service().addCardsAsync(uuid, Math.max(0, amount))
+        if (give) {
+            plugin.service().addCardsAsync(uuid, amount)
                     .thenAccept(total -> Schedulers.global(plugin, () -> {
                         plugin.messages().send(sender, "card-given",
-                                "player", args[2], "amount", String.valueOf(Math.max(0, amount)));
-                        notifyIfOnline(uuid, "card-given", args[2], String.valueOf(Math.max(0, amount)));
-                    }));
-            case "take", "remove" -> plugin.service().takeCardsAsync(uuid, Math.max(0, amount))
+                                "player", args[2], "amount", String.valueOf(amount));
+                        notifyIfOnline(uuid, "card-given", args[2], String.valueOf(amount));
+                    }))
+                    .exceptionally(error -> {
+                        fail(sender, error);
+                        return null;
+                    });
+        } else if (take) {
+            plugin.service().takeCardsAsync(uuid, amount)
                     .thenAccept(success -> Schedulers.global(plugin, () -> {
                         if (success) {
                             plugin.messages().send(sender, "card-taken",
-                                    "player", args[2], "amount", String.valueOf(Math.max(0, amount)));
-                            notifyIfOnline(uuid, "card-taken", args[2], String.valueOf(Math.max(0, amount)));
+                                    "player", args[2], "amount", String.valueOf(amount));
+                            notifyIfOnline(uuid, "card-taken", args[2], String.valueOf(amount));
                         } else {
                             plugin.messages().send(sender, "card-insufficient");
                         }
-                    }));
-            case "set" -> plugin.service().setCardsAsync(uuid, amount)
+                    }))
+                    .exceptionally(error -> {
+                        fail(sender, error);
+                        return null;
+                    });
+        } else {
+            plugin.service().setCardsAsync(uuid, amount)
                     .thenAccept(total -> Schedulers.global(plugin, () ->
                             plugin.messages().send(sender, "card-set",
-                                    "player", args[2], "amount", String.valueOf(total))));
-            default -> plugin.messages().send(sender, "unknown-command");
+                                    "player", args[2], "amount", String.valueOf(total))))
+                    .exceptionally(error -> {
+                        fail(sender, error);
+                        return null;
+                    });
         }
     }
 
@@ -307,8 +344,12 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
             return;
         }
         plugin.service().resetAsync(target.getUniqueId()).thenRun(() ->
-                Schedulers.global(plugin, () -> plugin.messages().send(sender, "reset-done",
-                        "player", args[1])));
+                        Schedulers.global(plugin, () -> plugin.messages().send(sender, "reset-done",
+                                "player", args[1])))
+                .exceptionally(error -> {
+                    fail(sender, error);
+                    return null;
+                });
     }
 
     private void setStat(CommandSender sender, String[] args, boolean streak) {
@@ -336,10 +377,14 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
                 ? plugin.service().setStreakAsync(uuid, value)
                 : plugin.service().setTotalAsync(uuid, value);
         future.thenRun(() -> Schedulers.global(plugin, () ->
-                plugin.messages().send(sender, "set-done",
-                        "player", args[1],
-                        "field", streak ? "连续天数" : "累计天数",
-                        "value", String.valueOf(Math.max(0, value)))));
+                        plugin.messages().send(sender, "set-done",
+                                "player", args[1],
+                                "field", streak ? "连续天数" : "累计天数",
+                                "value", String.valueOf(Math.max(0, value)))))
+                .exceptionally(error -> {
+                    fail(sender, error);
+                    return null;
+                });
     }
 
     private void purge(CommandSender sender, String[] args) {
@@ -358,9 +403,13 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
         int finalDays = Math.max(1, days);
         LocalDate cutoff = plugin.time().today().minusDays(finalDays);
         plugin.service().purgeAsync(finalDays).thenAccept(count ->
-                Schedulers.global(plugin, () -> plugin.messages().send(sender, "purged",
-                        "count", String.valueOf(count),
-                        "date", cutoff.toString())));
+                        Schedulers.global(plugin, () -> plugin.messages().send(sender, "purged",
+                                "count", String.valueOf(count),
+                                "date", cutoff.toString())))
+                .exceptionally(error -> {
+                    fail(sender, error);
+                    return null;
+                });
     }
 
     private void dbTest(CommandSender sender) {
@@ -374,12 +423,28 @@ public final class SigninCommand implements CommandExecutor, TabCompleter {
                     } else {
                         plugin.messages().send(sender, "db-fail", "error", "连接不可用");
                     }
-                }));
+                })).exceptionally(error -> {
+            fail(sender, error);
+            return null;
+        });
     }
 
     // ==================================================================
     // 工具
     // ==================================================================
+
+    private void fail(CommandSender sender, Throwable error) {
+        plugin.getLogger().warning("命令执行失败：" + rootMessage(error));
+        Schedulers.global(plugin, () -> plugin.messages().send(sender, "error"));
+    }
+
+    private static String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
 
     private void sendHelp(CommandSender sender) {
         plugin.messages().list("help").forEach(sender::sendMessage);

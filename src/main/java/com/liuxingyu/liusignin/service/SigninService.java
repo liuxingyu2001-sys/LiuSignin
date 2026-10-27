@@ -96,6 +96,24 @@ public final class SigninService {
         return states.get(uuid);
     }
 
+    /** 只返回 TTL 内的缓存；过期或未加载返回 null。 */
+    public PlayerState cachedFresh(UUID uuid) {
+        PlayerState state = uuid == null ? null : states.get(uuid);
+        if (state != null && System.currentTimeMillis() - state.loadedAt() >= STATE_TTL_MS) {
+            return null;
+        }
+        return state;
+    }
+
+    /** 清掉离线且过期玩家的状态，避免 /signin info、API 查离线玩家导致 Map 无限增长。 */
+    public void evictInactive() {
+        long cutoff = System.currentTimeMillis() - STATE_TTL_MS;
+        states.entrySet().removeIf(entry -> {
+            var online = plugin.getServer().getPlayer(entry.getKey());
+            return (online == null || !online.isOnline()) && entry.getValue().loadedAt() < cutoff;
+        });
+    }
+
     public PlayerSigninData data(UUID uuid) {
         PlayerState state = states.get(uuid);
         return state == null ? null : state.data();
@@ -179,7 +197,12 @@ public final class SigninService {
                         future.complete(result);
                         return;
                     }
-                    Schedulers.onPlayer(plugin, player, () -> finishSign(player, result, source, future));
+                    Schedulers.onPlayer(plugin, player, () -> finishSign(player, result, source, future))
+                            .whenComplete((ignored, error) -> {
+                                if (error != null) {
+                                    future.completeExceptionally(error);
+                                }
+                            });
                 })
                 .exceptionally(error -> {
                     plugin.getLogger().warning("签到失败（" + name + "）：" + rootMessage(error));
@@ -202,7 +225,7 @@ public final class SigninService {
         int newTotal = data.total() + 1;
 
         SigninStore.SignOutcome outcome = plugin.store().beginSign(
-                uuid, name, today, newStreak, newBest, group.id(), plugin.serverId());
+                uuid, name, today, newStreak, newBest, newTotal, group.id(), plugin.serverId());
         if (!outcome.ok()) {
             PlayerSigninData fresh = plugin.store().load(uuid);
             cache(uuid, fresh, today, true);
@@ -305,7 +328,12 @@ public final class SigninService {
                         future.complete(result);
                         return;
                     }
-                    Schedulers.onPlayer(plugin, player, () -> finishMakeup(player, result, future));
+                    Schedulers.onPlayer(plugin, player, () -> finishMakeup(player, result, future))
+                            .whenComplete((ignored, error) -> {
+                                if (error != null) {
+                                    future.completeExceptionally(error);
+                                }
+                            });
                 })
                 .exceptionally(error -> {
                     plugin.getLogger().warning("补签失败（" + name + " " + date + "）：" + rootMessage(error));
@@ -339,7 +367,7 @@ public final class SigninService {
         int newTotal = data.total() + 1;
 
         SigninStore.MakeupOutcome outcome = plugin.store().beginMakeup(
-                uuid, name, date, newStreak, newBest, group.id(), plugin.serverId(),
+                uuid, name, date, newStreak, newBest, newTotal, group.id(), plugin.serverId(),
                 config.cardsPerMakeup(), advance);
         if (outcome != SigninStore.MakeupOutcome.OK) {
             MakeupStatus status = switch (outcome) {
@@ -419,12 +447,14 @@ public final class SigninService {
                             }
                             RewardGroup group = plugin.rewards().groupById(log.rewardGroup())
                                     .orElseGet(() -> plugin.rewards().groupFor(player));
+                            int logTotal = log.total() > 0 ? log.total()
+                                    : Math.max(1, plugin.service().total(uuid));
                             List<Reward> rewards = plugin.rewards().rewardsFor(
-                                    group, log.date(), log.streak(), log.streak());
+                                    group, log.date(), log.streak(), logTotal);
                             plugin.getLogger().info("补发未完成的签到奖励：" + player.getName()
                                     + " " + log.date() + " streak=" + log.streak());
                             plugin.rewardService().grant(player, rewards, log.streak(),
-                                    plugin.service().total(uuid), log.date());
+                                    logTotal, log.date());
                             Schedulers.asyncRun(plugin, () -> plugin.store()
                                     .markGranted(uuid, log.date(), SigninLog.STATUS_GRANTED));
                         }
@@ -442,7 +472,7 @@ public final class SigninService {
 
     public CompletableFuture<Integer> addCardsAsync(UUID uuid, int amount) {
         if (amount <= 0) {
-            return CompletableFuture.completedFuture(cards(uuid));
+            return Schedulers.async(plugin, () -> plugin.store().cards(uuid));
         }
         return Schedulers.async(plugin, () -> {
             int cards = plugin.store().addCards(uuid, amount);
@@ -456,6 +486,9 @@ public final class SigninService {
     }
 
     public CompletableFuture<Boolean> takeCardsAsync(UUID uuid, int amount) {
+        if (amount <= 0) {
+            return CompletableFuture.completedFuture(false);
+        }
         return Schedulers.async(plugin, () -> {
             boolean ok = plugin.store().takeCards(uuid, amount);
             if (ok) {
@@ -470,14 +503,15 @@ public final class SigninService {
     }
 
     public CompletableFuture<Integer> setCardsAsync(UUID uuid, int amount) {
+        int safe = Math.max(0, amount);
         return Schedulers.async(plugin, () -> {
-            plugin.store().setCards(uuid, amount);
+            plugin.store().setCards(uuid, safe);
             PlayerState state = states.get(uuid);
             if (state != null) {
-                state.data().makeupCards(amount);
+                state.data().makeupCards(safe);
             }
             plugin.sync().publishInvalidate(uuid);
-            return Math.max(0, amount);
+            return safe;
         });
     }
 

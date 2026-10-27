@@ -76,11 +76,16 @@ public record Reward(Type type, String value, double amount, String mode) {
     }
 
     private static double parseAmount(String body, String raw) {
+        double amount;
         try {
-            return Double.parseDouble(body);
+            amount = Double.parseDouble(body);
         } catch (NumberFormatException error) {
             throw new IllegalArgumentException("奖励数量不是数字: " + raw, error);
         }
+        if (!Double.isFinite(amount)) {
+            throw new IllegalArgumentException("奖励数量必须是有限数字: " + raw);
+        }
+        return amount;
     }
 
     /** 玩家可读的奖励摘要（月历 lore / 聊天消息）。 */

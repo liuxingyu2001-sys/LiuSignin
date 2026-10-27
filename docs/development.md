@@ -5,7 +5,7 @@
 ```bash
 cd /home/liu/plugins/LiuSignin
 mvn clean package
-# 产物：target/LiuSignin-1.0.6.jar
+# 产物：target/LiuSignin-1.0.7.jar
 ```
 
 - Java 21，Paper API `1.21.11-R0.1-SNAPSHOT`。

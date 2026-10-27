@@ -5,7 +5,7 @@ Redis 缓存失效、Sparrow UI 界面。
 
 - 包名：`com.liuxingyu.liusignin`
 - 命令：`/signin`（别名 `/sign`、`/qd`、`/qiandao`）
-- 版本：`1.0.6`
+- 版本：`1.0.7`
 - 硬依赖：[LiuLib](../LiuLib) 1.0.5+（MySQL 连接凭据 / Redis / Sparrow UI / 物品规格）
 - 软依赖：Vault、PlaceholderAPI、Redis、[liuitemlib](../liuitemlib)、CraftEngine
 
@@ -49,7 +49,7 @@ Redis 缓存失效、Sparrow UI 界面。
 
 ## 快速开始
 
-1. 把 `LiuLib-1.0.5.jar` 与 `LiuSignin-1.0.6.jar` 放入 `plugins/`。
+1. 把 `LiuLib-1.0.5.jar` 与 `LiuSignin-1.0.7.jar` 放入 `plugins/`。
 2. 在 LiuLib 中启用 MySQL 并重启。
 3. 启动服务器，生成 `plugins/LiuSignin/{config.yml,rewards.yml,menus.yml,messages.yml}`。
 4. 按需修改配置，执行 `/signin reload`。
@@ -58,7 +58,7 @@ Redis 缓存失效、Sparrow UI 界面。
 
 | 文档 | 内容 |
 |---|---|
-| [安装与升级](docs/installation.md) | 依赖、首次安装、1.0.5 → 1.0.6 数据库迁移、共享配置目录 |
+| [安装与升级](docs/installation.md) | 依赖、首次安装、1.0.5 → 1.0.7 数据库迁移、共享配置目录 |
 | [命令与权限](docs/commands.md) | 全部命令、权限节点、别名 |
 | [配置说明](docs/configuration.md) | `config.yml` / `rewards.yml` / `menus.yml` / `messages.yml` |
 | [存储与数据库](docs/storage.md) | 独立库设计、旧库迁移、表结构、索引、多服并发 |
@@ -67,6 +67,18 @@ Redis 缓存失效、Sparrow UI 界面。
 | [开发与验证](docs/development.md) | 构建、测试、目录结构、设计限制 |
 
 ## 版本说明
+
+### 1.0.7
+
+- **修复断线补发奖励档位错误**：签到日志新增 `total` 列，补发时按当时累计天数计算；旧表启动时自动补列。
+- **邮箱领取改为整条原子交付**：背包放不下时整条保留，不再异步回写剩余物品，避免崩溃/断服时物品丢失或重复；
+  “一键领取”会跨多个批次领完，直到邮箱空或背包满。
+- **future 不再挂起**：异步结果返回前玩家离线/切服时，签到、补签、邮箱等 future 会异常结束；命令与菜单统一显示失败提示。
+- **跨服提醒复核**：发送提醒前后都用签到日志确认，避免另一子服刚签到却仍收到提醒。
+- **迁移更稳**：旧库迁移按两表同名列复制，目标表为空时可补迁移，非空目标表不覆盖；
+  新增 `log.total` 列由插件自动补齐。
+- **其他**：补签卡数量参数校验、API `cachedProfile` 严格按缓存 TTL、离线玩家状态定时清理、
+  奖励 DSL 拒绝 `NaN`/`Infinity`、奖励命令去掉前导 `/`。
 
 ### 1.0.6
 

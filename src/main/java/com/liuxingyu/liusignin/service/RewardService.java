@@ -113,6 +113,9 @@ public final class RewardService {
                                 "streak", String.valueOf(streak),
                                 "total", String.valueOf(total),
                                 "date", date == null ? "" : date.toString());
+                        while (command.startsWith("/")) {
+                            command = command.substring(1).trim();
+                        }
                         if (command.isBlank()) {
                             continue;
                         }

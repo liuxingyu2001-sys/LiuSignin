@@ -4,6 +4,7 @@ import com.liuxingyu.liulib.storage.MySql;
 import com.liuxingyu.liulib.storage.SqlConfig;
 import com.liuxingyu.liusignin.config.SigninConfig;
 
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -50,7 +51,11 @@ public final class SigninDatabase {
 
     /**
      * 首次升级时，把旧版留在 LiuLib 库（通常 {@code liulib}）里的 {@code liusignin_*} 表
-     * 复制到新库。只复制“新库不存在”的表，不会覆盖新库已有数据。
+     * 复制到新库。只复制“新库不存在或为空”的表，不会覆盖新库已有数据。
+     *
+     * <p>只复制两边都存在的列，因此旧表没有 1.0.6 新增的 {@code total} 列也能迁移；
+     * 新列由 {@link SigninStore#init()} 补默认值。表已存在且非空时跳过，避免把管理员
+     * 后来清理/重置的数据再导回来。</p>
      */
     public static void migrate(MySql library, MySql target, String prefix, Logger logger) {
         String sourceDb = library.config().database();
@@ -61,17 +66,37 @@ public final class SigninDatabase {
         int copied = 0;
         for (String name : SigninStore.TABLES) {
             String table = prefix + name;
+            String source = quote(sourceDb) + "." + quote(table);
+            String destination = quote(targetDb) + "." + quote(table);
             try {
-                if (exists(target, targetDb, table)) {
-                    continue;
-                }
                 if (!exists(target, sourceDb, table)) {
                     continue;
                 }
-                target.execute("CREATE TABLE `" + targetDb + "`.`" + table + "` LIKE `"
-                        + sourceDb + "`.`" + table + "`");
-                int rows = target.update("INSERT IGNORE INTO `" + targetDb + "`.`" + table
-                        + "` SELECT * FROM `" + sourceDb + "`.`" + table + "`");
+                boolean targetExists = exists(target, targetDb, table);
+                if (targetExists && count(target, targetDb, table) > 0) {
+                    continue;
+                }
+                List<String> sourceColumns = columns(target, sourceDb, table);
+                if (sourceColumns.isEmpty()) {
+                    continue;
+                }
+                if (!targetExists) {
+                    target.execute("CREATE TABLE " + destination + " LIKE " + source);
+                }
+                List<String> targetColumns = columns(target, targetDb, table);
+                List<String> shared = sourceColumns.stream()
+                        .filter(targetColumns::contains)
+                        .toList();
+                if (shared.isEmpty()) {
+                    logger.warning("迁移表 " + table + " 失败：新旧表没有同名列");
+                    continue;
+                }
+                String names = shared.stream()
+                        .map(SigninDatabase::quote)
+                        .reduce((left, right) -> left + ", " + right)
+                        .orElseThrow();
+                int rows = target.update("INSERT IGNORE INTO " + destination
+                        + " (" + names + ") SELECT " + names + " FROM " + source);
                 copied++;
                 logger.info("已迁移表 " + sourceDb + "." + table + " → "
                         + targetDb + "." + table + "（" + rows + " 行）");
@@ -90,5 +115,23 @@ public final class SigninDatabase {
                 "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
                 rs -> rs.getInt(1) > 0, database, table);
         return Boolean.TRUE.equals(value);
+    }
+
+    private static long count(MySql mysql, String database, String table) {
+        Long value = mysql.queryOne("SELECT COUNT(*) FROM " + quote(database) + "." + quote(table),
+                rs -> rs.getLong(1));
+        return value == null ? 0L : value;
+    }
+
+    private static List<String> columns(MySql mysql, String database, String table) {
+        List<String> values = mysql.query(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS"
+                        + " WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
+                rs -> rs.getString(1), database, table);
+        return values == null ? List.of() : values;
+    }
+
+    private static String quote(String identifier) {
+        return "`" + identifier.replace("`", "``") + "`";
     }
 }
